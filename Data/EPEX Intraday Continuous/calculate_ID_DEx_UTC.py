@@ -44,7 +44,7 @@ DEBUG_FILTER_DELIVERY = None     # Filter by specific timestamp (e.g., "2021-10-
 # ==============================================================================
 SKIP_DELIVERY_START = True       # Global flag used to skip remaining intervals of current contract
 
-# Lead-time window names: ordered chronologically from earliest (345to360m prior) down to gate closure (0to15m, 0to30m)
+# Lead-time windows: ordered chronologically from earliest (345to360m prior) down to gate closure (0to15m, *0to30m - label!*)
 LEAD_TIME_WINDOW_NAMES = [
     '0to30', '0to15', '15to30', '30to45', '45to60', '60to75', '75to90', '90to105',
     '105to120', '120to135', '135to150', '150to165', '165to180', '180to195', '195to210',
@@ -356,22 +356,19 @@ def process_trade_files(
     """
     Annual batch manager coordinating the processing of all daily trade files for a given year.
     
-    Workflow:
-    ---------
     1. Task Preparation:
-       Pairs each daily CSV file with the target delivery area (e.g., 'DE', 'DE1'..'DE4').
+       Pairs each daily CSV file with the target delivery area. (Build tasks list for parallel execution)
        
     2. Parallel Execution (or Sequential Debugger):
-       - If DEBUG_MODE is True: Runs sequentially on 1 CPU core so the interactive CLI 
+       - If DEBUG_MODE is True: Runs sequentially on 1 CPU core!
          debugger ([ENTER], [s], [q]) functions without terminal conflicts.
-       - If DEBUG_MODE is False: Distributes all daily files across available CPU cores 
-         using ProcessPoolExecutor (max_workers = cpu_count - 1) for fast parallel processing.
+       - If DEBUG_MODE is False: Distributes all daily files across available CPU cores.
          
     3. Consolidation & Final Export:
        - Concatenates all daily DataFrames into one continuous annual time series.
        - Reorders columns so 'DeliveryStart' is the first (timestamp index) column.
        - Sorts rows chronologically by DeliveryStart and drops duplicate delivery intervals.
-       - Exports the final annual dataset as 'ID_DelArea_{target_area}_{year}.csv' (~35,040 rows).
+       - Exports the final annual dataset as 'ID_DelArea_{target_area}_{year}.csv' in 15 minute Steps (~35,040 rows).
     """
     # 1. Build list of task tuples: (filepath, target_area) for each daily file
     file_args = [(os.path.join(source_dir, filename), target_area) for filename in file_list]
@@ -418,7 +415,8 @@ def calculate_id_da_utc(
     year: int, 
     target_area: str, 
     source_dir: str = None, 
-    output_dir: str = None
+    output_dir: str = None,
+    is_index: bool = False
 ) -> None:
     """
     Main entry point for processing EPEX data for a specific year and market/TSO area.
@@ -426,12 +424,17 @@ def calculate_id_da_utc(
     """
     pd.options.mode.chained_assignment = None
 
+    base_dir = '/home/mat/Dokumente/Delivery Area EPF/Data/EPEX Intraday Continuous'
+
     if output_dir is None:
-        output_dir = '/home/mat/Schreibtisch/INREC/Data/Raw'
+        output_dir = base_dir
     os.makedirs(output_dir, exist_ok=True)
 
     if source_dir is None:
-        source_dir = f'/media/mat/VERBATIM SD/EPEX/germany/Intraday Continuous/EOD/Historical/Transactions/Continuous_Trades-DE-{year}'
+        if is_index:
+            source_dir = os.path.join(base_dir, f'{year} index')
+        else:
+            source_dir = os.path.join(base_dir, f'{year}')
 
     if not os.path.exists(source_dir):
         print(f"WARNING: Directory not found for year {year}: {source_dir}")
@@ -472,8 +475,8 @@ def process_index_files(
     output_dir: str
 ) -> None:
     """
-    *Validation* Matches calculated VWAPs against official EPEX published files (ID1, ID3)
-    Files from here: "EPEX/germany/Intraday Continuous/Indices/Historical/Intraday indices/"
+    *Validation* Matches calculated VWAPs against official EPEX published index files (ID1, ID3).
+    Source directory: 'Data/EPEX Intraday Continuous/{year} index/'
     Pivots index prices and volumes by DeliveryStart and saves to CSV.
     """
     print(f"-> Processing EPEX Index files (UTC) for {target_area} {year}...")
@@ -515,7 +518,7 @@ def process_index_files(
     merged = pd.concat([piv_price, piv_vol], axis=1).reset_index()
     merged = merged.sort_values('DeliveryStart').drop_duplicates(subset=['DeliveryStart'])
     
-    output_file = os.path.join(output_dir, f"ID_DelArea_{target_area}_{year}.csv")
+    output_file = os.path.join(output_dir, f"ID_Index_{target_area}_{year}.csv")
     merged.to_csv(output_file, index=False)
     print(f"Completed index processing for {target_area}_{year}: Saved to {output_file} ({len(merged)} rows)")
 
@@ -593,9 +596,9 @@ if __name__ == '__main__':
     # Configuration for standalone execution
     years = [2022]
     areas = ['DE1', 'DE2', 'DE3', 'DE4', 'DE']
-    out_dir = '/home/mat/Schreibtisch/INREC/Data/Raw'
+    out_dir = '/home/mat/Dokumente/Delivery Area EPF/Data/EPEX Intraday Continuous/'
     
     print("Starting recomputation for years 2021-2024 across all TSO zones in EPEX UTC time (Multiprocessing)...")
     for year in years:
         for area in areas:
-            calculate_id_da_utc(year=year, target_area=area, output_dir=out_dir)
+            calculate_id_da_utc(year=year, target_area=area, output_dir=out_dir, is_index=False)
