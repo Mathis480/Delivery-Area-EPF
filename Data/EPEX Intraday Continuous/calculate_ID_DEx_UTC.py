@@ -81,10 +81,10 @@ def calculate_total_volume(df_subset: pd.DataFrame) -> float:
     return result
 
 
-def calculate_total_trades(df_subset: pd.DataFrame) -> float:
+def calculate_total_trades(df_subset: pd.DataFrame) -> int:
     """Count the total number of executed trades for a subset of transactions."""
     try:
-        result = df_subset['Volume'].count() # Here, just Volume has been taken (could be anything)
+        result = len(df_subset)
     except Exception:
         result = np.nan
     return result
