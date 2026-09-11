@@ -64,6 +64,7 @@ def calculate_vwap(df_subset: pd.DataFrame) -> float:
     """
     Calculate the Volume-Weighted Average Price (VWAP) for a subset of transactions.
     Returns NaN if total volume is zero or no trades exist.
+    For more info read: https://arxiv.org/abs/1812.09081
     """
     vol = df_subset['Volume'].sum()
     if vol == 0:
@@ -92,7 +93,7 @@ def calculate_total_trades(df_subset: pd.DataFrame) -> int:
 
 def calculate_idbalance(df_subset: pd.DataFrame) -> float:
     """
-    Calculate the net commercial balance across all cross-border trades.
+    Calculate the balance across all cross-border trades. This will help us to identify trades between zones and maybe uncover some imbalances beforehand.
     
     Convention:
     - Imports add positive volume to the local area balance (+Volume).
@@ -109,7 +110,7 @@ def calculate_idbalance(df_subset: pd.DataFrame) -> float:
 
 def calculate_idbalance_to_zone(df_subset: pd.DataFrame, zone_code: str) -> float:
     """
-    Calculate the net commercial trade balance specifically with a designated German TSO zone.
+    Calculate the trade balance specifically with German TSO zone.
     
     Parameters:
     -----------
@@ -129,7 +130,7 @@ def calculate_idbalance_to_zone(df_subset: pd.DataFrame, zone_code: str) -> floa
 
 
 def calculate_idbalance_to_self(df_subset: pd.DataFrame) -> float:
-    """Calculate the total volume of purely internal trades within the same delivery zone."""
+    """Calculate the total volume of purely internal trades within the same delivery zone. THESE ARE NO SELF-TRADES IN SENSE OF EXCEL-FILE. """
     if df_subset['Volume'].sum() == 0:
         return np.nan
     else:
@@ -140,7 +141,7 @@ def calculate_idbalance_to_self(df_subset: pd.DataFrame) -> float:
 
 def calculate_metrics(
     df: pd.DataFrame, 
-    delivery_start: pd.Timestamp, 
+    delivery_start: pd.Timestamp, # for debug purposes
     window_metrics_list: list, 
     window_idx: int, 
     interval_name: str, 
@@ -207,7 +208,7 @@ def get_trade_type(delivery_area: str, trade_id: int, target_area: str, side: st
     delivery_area : str
         Delivery area of this trade record.
     trade_id : int
-        Unique EPEX trade ID.
+        Unique EPEX trade ID. For debug purposes.
     target_area : str
         Target delivery area being analyzed (e.g., 'DE' or 'DE1'..'DE4').
     side : str
@@ -216,8 +217,8 @@ def get_trade_type(delivery_area: str, trade_id: int, target_area: str, side: st
     Returns:
     --------
     'self'   : Counterparty is within the same target area.
-    'export' : Target area sells power to an external area (Side == 'BUY' on counterpart leg).
-    'import' : Target area buys power from an external area (Side == 'SELL' on counterpart leg).
+    'export' : Target area sells power to an external area (Side == 'BUY' on counterpart).
+    'import' : Target area buys power from an external area (Side == 'SELL' on counterpart).
     """
     if target_area == 'DE':
         is_target = str(delivery_area).startswith('DE')
@@ -226,29 +227,12 @@ def get_trade_type(delivery_area: str, trade_id: int, target_area: str, side: st
         
     if not is_target:
         if side == "BUY":
-            return "export"
+            # BUY someone wants to buy from your area - so you are exporting
+            return "export" 
         elif side == "SELL":
+            # SELL someone wants to sell to your area - so you are importing
             return "import"
     return "self"
-
-
-def detect_skiprows(file_path: str) -> int:
-    """
-    Inspect the first two lines of a CSV to handle header metadata offsets.
-    Returns 0 if standard header is on row 1, or 1 if metadata precedes headers.
-    """
-    try:
-        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-            l1 = f.readline()
-            l2 = f.readline()
-        keywords = ['TradeId', 'DeliveryArea', 'DeliveryStart', 'Price', 'Volume', 'IndexName', 'TimeResolution']
-        if any(k.lower() in l1.lower() for k in keywords):
-            return 0
-        if any(k.lower() in l2.lower() for k in keywords):
-            return 1
-    except Exception:
-        pass
-    return 0
 
 
 def process_index_files(
@@ -267,8 +251,7 @@ def process_index_files(
     for filename in tqdm.tqdm(file_list, desc=f"{target_area}_{year}_index"):
         file_path = os.path.join(source_dir, filename)
         try:
-            sr = detect_skiprows(file_path)
-            df = pd.read_csv(file_path, skiprows=sr)
+            df = pd.read_csv(file_path, comment='#')
             df.columns = [c.strip() for c in df.columns]
             # Exclude auxiliary upper/lower threshold boundaries, retaining actual index values
             if 'IndexName' in df.columns and 'DeliveryStart' in df.columns:
@@ -322,8 +305,7 @@ def process_single_trade_file(args: tuple) -> pd.DataFrame:
     """
     file_path, target_area = args
     try:  
-        sr = detect_skiprows(file_path)
-        df_trades = pd.read_csv(file_path, skiprows=sr, delimiter=',')
+        df_trades = pd.read_csv(file_path, comment='#', delimiter=',')
 
         if df_trades.empty:
             return None
@@ -506,8 +488,7 @@ def calculate_id_da_utc(
 
     # Inspect sample row to detect file type
     first_file = os.path.join(source_dir, file_list[0])
-    sr = detect_skiprows(first_file)
-    df_sample = pd.read_csv(first_file, skiprows=sr, nrows=3)
+    df_sample = pd.read_csv(first_file, comment='#', nrows=3)
     cols = [str(c).strip() for c in df_sample.columns]
 
     if any('IndexName' in c for c in cols):
