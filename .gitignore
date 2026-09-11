@@ -1,0 +1,65 @@
+# ==============================================================================
+# STRICT SECURITY & DATA PROTECTION: PREVENT ANY RAW OR SENSITIVE DATA LEAKAGE
+# ==============================================================================
+
+# Ignore all tabular, binary, database, and archive data formats
+*.csv
+*.tsv
+*.parquet
+*.feather
+*.arrow
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.npy
+*.npz
+*.db
+*.duckdb
+*.sqlite
+*.sqlite3
+*.xlsx
+*.xls
+*.zip
+*.tar
+*.gz
+*.bz2
+*.7z
+*.rar
+*.pdf
+*.log
+*.txt
+*.json
+
+# Ignore raw data folders explicitly
+Data/EnergyCharts/
+Data/Auction Spot Prices/
+Data/Raw/
+Data/Transactions/
+Data/EPEX Intraday Continuous/*.csv
+Data/EPEX Intraday Continuous/*.zip
+
+# Python & Environment artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+.ipynb_checkpoints/
+.pytest_cache/
+
+# IDE & OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# ==============================================================================
+# WHITELIST: ONLY CODE AND REPOSITORY DOCUMENTATION ALLOWED
+# ==============================================================================
+!*.py
+!README.md
+!.gitignore
