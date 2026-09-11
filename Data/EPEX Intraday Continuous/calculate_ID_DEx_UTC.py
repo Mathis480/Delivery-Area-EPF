@@ -170,7 +170,7 @@ def calculate_metrics(
                 'id_trade_to_self_' + interval_name: 0
             })
         else:
-            # Forward-fill previous known VWAP from earlier lead-time window
+            # Forward-fill previous known VWAP from earlier lead-time window (if any)
             prev_price = window_metrics_list[-1].get(f'VWAP_{window_names[window_idx-1]}', np.nan)
             temp_list.append({
                 'VWAP_' + interval_name: prev_price,
@@ -184,7 +184,7 @@ def calculate_metrics(
                 'id_trade_to_self_' + interval_name: 0
             })
     else:
-        # Trades exist: calculate exact weighted metrics
+        # At least one or more trades exist: calculate exact weighted metrics
         temp_list.append({
             'VWAP_' + interval_name: calculate_vwap(df),
             'VWAP_total_volume_' + interval_name: calculate_total_volume(df),
@@ -203,8 +203,6 @@ def get_trade_type(delivery_area: str, trade_id: int, target_area: str, side: st
     """
     Classify a trade record into 'self', 'export', or 'import' relative to the analyzed area.
     
-    Parameters:
-    -----------
     delivery_area : str
         Delivery area of this trade record.
     trade_id : int
@@ -215,10 +213,9 @@ def get_trade_type(delivery_area: str, trade_id: int, target_area: str, side: st
         Order side ('BUY' or 'SELL').
         
     Returns:
-    --------
-    'self'   : Counterparty is within the same target area.
-    'export' : Target area sells power to an external area (Side == 'BUY' on counterpart).
-    'import' : Target area buys power from an external area (Side == 'SELL' on counterpart).
+        'self'   : Counterparty is within the same target area.
+        'export' : Target area sells power to an external area (Side == 'BUY' on counterpart).
+        'import' : Target area buys power from an external area (Side == 'SELL' on counterpart).
     """
     if target_area == 'DE':
         is_target = str(delivery_area).startswith('DE')
@@ -235,69 +232,14 @@ def get_trade_type(delivery_area: str, trade_id: int, target_area: str, side: st
     return "self"
 
 
-def process_index_files(
-    year: int, 
-    target_area: str, 
-    file_list: list, 
-    source_dir: str, 
-    output_dir: str
-) -> None:
-    """
-    Process official EPEX Continuous Index files (e.g. ID3, ID1 indices published directly by EPEX).
-    Pivots index prices and volumes by DeliveryStart and saves to CSV.
-    """
-    print(f"-> Processing EPEX Index files (UTC) for {target_area} {year}...")
-    dfs = []
-    for filename in tqdm.tqdm(file_list, desc=f"{target_area}_{year}_index"):
-        file_path = os.path.join(source_dir, filename)
-        try:
-            df = pd.read_csv(file_path, comment='#')
-            df.columns = [c.strip() for c in df.columns]
-            # Exclude auxiliary upper/lower threshold boundaries, retaining actual index values
-            if 'IndexName' in df.columns and 'DeliveryStart' in df.columns:
-                df = df[~df['IndexName'].astype(str).str.lower().str.contains('upper|lower')].copy()
-                dfs.append(df)
-        except Exception as e:
-            print(f"Error reading index file {filename}: {e}")
-            
-    if not dfs:
-        print(f"WARNING: No index data extracted for {target_area} {year}.")
-        return
-        
-    full_df = pd.concat(dfs, ignore_index=True)
-    full_df['DeliveryStart'] = pd.to_datetime(full_df['DeliveryStart'], utc=True)
-    
-    # Filter strictly for 15-minute quarter-hourly indices
-    if 'TimeResolution' in full_df.columns:
-        df_15 = full_df[full_df['TimeResolution'].astype(str).str.contains('15', na=False)].copy()
-        if df_15.empty:
-            df_15 = full_df.copy()
-    else:
-        df_15 = full_df.copy()
-        
-    piv_price = df_15.pivot_table(index='DeliveryStart', columns='IndexName', values='IndexPrice', aggfunc='mean')
-    piv_vol = df_15.pivot_table(index='DeliveryStart', columns='IndexName', values='IndexVolume', aggfunc='sum')
-    
-    prefix = target_area.lower()
-    piv_price.columns = [f"{prefix}_id_{str(col).lower()}_price" for col in piv_price.columns]
-    piv_vol.columns = [f"{prefix}_id_{str(col).lower()}_volume" for col in piv_vol.columns]
-    
-    merged = pd.concat([piv_price, piv_vol], axis=1).reset_index()
-    merged = merged.sort_values('DeliveryStart').drop_duplicates(subset=['DeliveryStart'])
-    
-    output_file = os.path.join(output_dir, f"ID_DelArea_{target_area}_{year}.csv")
-    merged.to_csv(output_file, index=False)
-    print(f"Completed index processing for {target_area}_{year}: Saved to {output_file} ({len(merged)} rows)")
-
-
 def process_single_trade_file(args: tuple) -> pd.DataFrame:
     """
     Worker function executed in parallel for a single daily trade file.
     
     Processing Steps:
     1. Read CSV and strip whitespace from headers.
-    2. Filter strictly for 15-minute contracts (duration == 15 min & Product name).
-    3. Filter out wash/self-trades ('SelfTrade' == 'N').
+    2. Filter for 15-minute contracts (duration == 15 min & Product name).
+    3. Filter out self-trades ('SelfTrade' == 'N').
     4. Isolate trades where at least one party belongs to the target delivery area.
     5. Classify trade direction ('self', 'export', 'import') and deduplicate TradeId.
     6. Compute lead-time difference in minutes: TimeDiff = DeliveryStart - ExecutionTime (UTC).
@@ -305,6 +247,7 @@ def process_single_trade_file(args: tuple) -> pd.DataFrame:
     """
     file_path, target_area = args
     try:  
+        # 1. Read CSV and strip whitespace from headers.
         df_trades = pd.read_csv(file_path, comment='#', delimiter=',')
 
         if df_trades.empty:
@@ -312,14 +255,14 @@ def process_single_trade_file(args: tuple) -> pd.DataFrame:
 
         df_trades.columns = [str(c).strip() for c in df_trades.columns]
 
-        # 1. Filter by Delivery Duration: strictly 15 minutes (900 seconds)
+        # 2.1 Filter by Delivery Duration: strictly 15 minutes (900 seconds)
         if 'DeliveryStart' in df_trades.columns and 'DeliveryEnd' in df_trades.columns:
             ds_dt = pd.to_datetime(df_trades['DeliveryStart'], utc=True, errors='coerce')
             de_dt = pd.to_datetime(df_trades['DeliveryEnd'], utc=True, errors='coerce')
             duration_min = (de_dt - ds_dt).dt.total_seconds() / 60.0
             df_trades = df_trades[duration_min == 15]
 
-        # 2. Filter by Product name: must be 15-min contract (exclude hourly/block contracts)
+        # 2.2 Filter by Product name: must be 15-min contract (exclude hourly/block contracts)
         if 'Product' in df_trades.columns:
             df_trades = df_trades[df_trades['Product'].isin(['Intraday_Quarter_Hour_Power', 'XBID_Quarter_Hour_Power'])]
 
@@ -328,7 +271,7 @@ def process_single_trade_file(args: tuple) -> pd.DataFrame:
             df_trades['SelfTrade'] = df_trades['SelfTrade'].astype(str).str.strip()
             df_trades = df_trades[df_trades['SelfTrade'] == 'N']
 
-        # Drop non-essential metadata columns to reduce memory consumption
+        # 3.1 Drop non-essential metadata columns to reduce memory consumption
         cols_to_drop = [c for c in ['RemoteTradeId', 'DeliveryEnd', 'UserDefinedBlock', 'Currency', 'OrderID', 'TradePhase', 'VolumeUnit', 'Product'] if c in df_trades.columns]
         df_trades = df_trades.drop(columns=cols_to_drop)
 
@@ -350,7 +293,7 @@ def process_single_trade_file(args: tuple) -> pd.DataFrame:
             axis=1
         )
 
-        # Deduplicate trades: sort so cross-border legs are prioritized and retain one unique record per TradeId
+        # 5.1 Deduplicate trades: sort so cross-border legs are prioritized and retain one unique record per TradeId
         df_trades = df_trades.sort_values(by=['TradeId', 'TradeTyp'], ascending=True)
         df_trades = df_trades.drop_duplicates(subset='TradeId', keep='first')
 
@@ -372,7 +315,7 @@ def process_single_trade_file(args: tuple) -> pd.DataFrame:
                 (df_trades['TimeDiff'] >= lead_from) & (df_trades['TimeDiff'] < lead_to)
             ]
 
-        # Aggregate metrics across all delivery quarter-hours
+        # 7.1 Aggregate metrics across all delivery quarter-hours
         delivery_records = []
         for delivery_start in delivery_starts:
             global SKIP_DELIVERY_START
@@ -411,12 +354,30 @@ def process_trade_files(
     output_dir: str
 ) -> None:
     """
-    Coordinate parallel batch processing of daily continuous trade files for a given year and area.
-    Concatenates individual daily results into a single clean annual CSV.
+    Annual batch manager coordinating the processing of all daily trade files for a given year.
+    
+    Workflow:
+    ---------
+    1. Task Preparation:
+       Pairs each daily CSV file with the target delivery area (e.g., 'DE', 'DE1'..'DE4').
+       
+    2. Parallel Execution (or Sequential Debugger):
+       - If DEBUG_MODE is True: Runs sequentially on 1 CPU core so the interactive CLI 
+         debugger ([ENTER], [s], [q]) functions without terminal conflicts.
+       - If DEBUG_MODE is False: Distributes all daily files across available CPU cores 
+         using ProcessPoolExecutor (max_workers = cpu_count - 1) for fast parallel processing.
+         
+    3. Consolidation & Final Export:
+       - Concatenates all daily DataFrames into one continuous annual time series.
+       - Reorders columns so 'DeliveryStart' is the first (timestamp index) column.
+       - Sorts rows chronologically by DeliveryStart and drops duplicate delivery intervals.
+       - Exports the final annual dataset as 'ID_DelArea_{target_area}_{year}.csv' (~35,040 rows).
     """
+    # 1. Build list of task tuples: (filepath, target_area) for each daily file
     file_args = [(os.path.join(source_dir, filename), target_area) for filename in file_list]
     df_naive_list = []
 
+    # 2. Execute processing: Sequential debug mode vs. Parallel multiprocessing
     if DEBUG_MODE:
         print(f"\n-> [DEBUG MODE ACTIVE] Processing EPEX trade files sequentially for {target_area} {year}...")
         for arg in tqdm.tqdm(file_args, desc=f"{target_area}_{year}_trades"):
@@ -437,8 +398,11 @@ def process_trade_files(
                 if res is not None and not res.empty:
                     df_naive_list.append(res)
 
+    # 3. Consolidate, sort, and save final annual time series
     if df_naive_list:
+        # Concatenate all daily results into a single annual DataFrame
         df_naive = pd.concat(df_naive_list, ignore_index=True, axis=0)
+        # Ensure DeliveryStart is the primary first column
         col = ["DeliveryStart"]
         df_naive = df_naive[col + [x for x in df_naive.columns if x not in col]]
         df_naive = df_naive.sort_values(by='DeliveryStart').drop_duplicates(subset=['DeliveryStart'])
@@ -497,6 +461,63 @@ def calculate_id_da_utc(
         process_trade_files(year, target_area, file_list, source_dir, output_dir)
     else:
         print(f"WARNING: File format in {source_dir} could not be identified. Columns found: {cols}")
+
+#=========== Debugging and Validation ============
+
+def process_index_files(
+    year: int, 
+    target_area: str, 
+    file_list: list, 
+    source_dir: str, 
+    output_dir: str
+) -> None:
+    """
+    *Validation* Matches calculated VWAPs against official EPEX published files (ID1, ID3)
+    Files from here: "EPEX/germany/Intraday Continuous/Indices/Historical/Intraday indices/"
+    Pivots index prices and volumes by DeliveryStart and saves to CSV.
+    """
+    print(f"-> Processing EPEX Index files (UTC) for {target_area} {year}...")
+    dfs = []
+    for filename in tqdm.tqdm(file_list, desc=f"{target_area}_{year}_index"):
+        file_path = os.path.join(source_dir, filename)
+        try:
+            df = pd.read_csv(file_path, comment='#')
+            df.columns = [c.strip() for c in df.columns]
+            # Exclude auxiliary upper/lower threshold boundaries, retaining actual index values
+            if 'IndexName' in df.columns and 'DeliveryStart' in df.columns:
+                df = df[~df['IndexName'].astype(str).str.lower().str.contains('upper|lower')].copy()
+                dfs.append(df)
+        except Exception as e:
+            print(f"Error reading index file {filename}: {e}")
+            
+    if not dfs:
+        print(f"WARNING: No index data extracted for {target_area} {year}.")
+        return
+        
+    full_df = pd.concat(dfs, ignore_index=True)
+    full_df['DeliveryStart'] = pd.to_datetime(full_df['DeliveryStart'], utc=True)
+    
+    # Filter strictly for 15-minute quarter-hourly indices
+    if 'TimeResolution' in full_df.columns:
+        df_15 = full_df[full_df['TimeResolution'].astype(str).str.contains('15', na=False)].copy()
+        if df_15.empty:
+            df_15 = full_df.copy()
+    else:
+        df_15 = full_df.copy()
+        
+    piv_price = df_15.pivot_table(index='DeliveryStart', columns='IndexName', values='IndexPrice', aggfunc='mean')
+    piv_vol = df_15.pivot_table(index='DeliveryStart', columns='IndexName', values='IndexVolume', aggfunc='sum')
+    
+    prefix = target_area.lower()
+    piv_price.columns = [f"{prefix}_id_{str(col).lower()}_price" for col in piv_price.columns]
+    piv_vol.columns = [f"{prefix}_id_{str(col).lower()}_volume" for col in piv_vol.columns]
+    
+    merged = pd.concat([piv_price, piv_vol], axis=1).reset_index()
+    merged = merged.sort_values('DeliveryStart').drop_duplicates(subset=['DeliveryStart'])
+    
+    output_file = os.path.join(output_dir, f"ID_DelArea_{target_area}_{year}.csv")
+    merged.to_csv(output_file, index=False)
+    print(f"Completed index processing for {target_area}_{year}: Saved to {output_file} ({len(merged)} rows)")
 
 def run_step_debugger(
     df_sub: pd.DataFrame, 
@@ -565,6 +586,8 @@ def run_step_debugger(
             raise KeyboardInterrupt("Debugger terminated by user.")
     except (EOFError, KeyboardInterrupt):
         raise
+
+#==================== MAIN =======================
 
 if __name__ == '__main__':
     # Configuration for standalone execution
