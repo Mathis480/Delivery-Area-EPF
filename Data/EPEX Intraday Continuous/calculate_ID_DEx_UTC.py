@@ -1,3 +1,4 @@
+#%%
 """
 This script processes raw EPEX Intraday Continuous trade and index CSV files (2021-2024)
 for Germany (national market area 'DE') as well as individual transmission system 
@@ -415,12 +416,10 @@ def calculate_id_da_utc(
     year: int, 
     target_area: str, 
     source_dir: str = None, 
-    output_dir: str = None,
-    is_index: bool = False
+    output_dir: str = None
 ) -> None:
     """
-    Main entry point for processing EPEX data for a specific year and market/TSO area.
-    Automatically detects whether the source directory contains raw trades or precalculated indices.
+    Main entry point for processing EPEX trade data for a specific year and market/TSO area.
     """
     pd.options.mode.chained_assignment = None
 
@@ -431,19 +430,16 @@ def calculate_id_da_utc(
     os.makedirs(output_dir, exist_ok=True)
 
     if source_dir is None:
-        if is_index:
-            source_dir = os.path.join(base_dir, f'{year} index')
-        else:
-            source_dir = os.path.join(base_dir, f'{year}')
+        source_dir = os.path.join(base_dir, f'{year}')
 
     if not os.path.exists(source_dir):
         print(f"WARNING: Directory not found for year {year}: {source_dir}")
         return
 
-    # Filter for valid EPEX trade or index CSV files
+    # Filter for valid EPEX trade CSV files
     file_list = [
         filename for filename in os.listdir(source_dir) 
-        if (filename.startswith('Continuous_Trades') or filename.startswith('Continuous_Index') or filename.startswith(f'Continuous_Trades-DE-{year}'))
+        if (filename.startswith('Continuous_Trades') or filename.startswith(f'Continuous_Trades-DE-{year}'))
         and filename.endswith('.csv') 
         and not filename.startswith('.')
     ]
@@ -453,74 +449,9 @@ def calculate_id_da_utc(
         print(f"No matching CSV files found in {source_dir} for year {year}.")
         return
 
-    # Inspect sample row to detect file type
-    first_file = os.path.join(source_dir, file_list[0])
-    df_sample = pd.read_csv(first_file, comment='#', nrows=3)
-    cols = [str(c).strip() for c in df_sample.columns]
-
-    if any('IndexName' in c for c in cols):
-        process_index_files(year, target_area, file_list, source_dir, output_dir)
-    elif any('TradeId' in c or 'DeliveryArea' in c for c in cols):
-        process_trade_files(year, target_area, file_list, source_dir, output_dir)
-    else:
-        print(f"WARNING: File format in {source_dir} could not be identified. Columns found: {cols}")
+    process_trade_files(year, target_area, file_list, source_dir, output_dir)
 
 #=========== Debugging and Validation ============
-
-def process_index_files(
-    year: int, 
-    target_area: str, 
-    file_list: list, 
-    source_dir: str, 
-    output_dir: str
-) -> None:
-    """
-    *Validation* Matches calculated VWAPs against official EPEX published index files (ID1, ID3).
-    Source directory: 'Data/EPEX Intraday Continuous/{year} index/'
-    Pivots index prices and volumes by DeliveryStart and saves to CSV.
-    """
-    print(f"-> Processing EPEX Index files (UTC) for {target_area} {year}...")
-    dfs = []
-    for filename in tqdm.tqdm(file_list, desc=f"{target_area}_{year}_index"):
-        file_path = os.path.join(source_dir, filename)
-        try:
-            df = pd.read_csv(file_path, comment='#')
-            df.columns = [c.strip() for c in df.columns]
-            # Exclude auxiliary upper/lower threshold boundaries, retaining actual index values
-            if 'IndexName' in df.columns and 'DeliveryStart' in df.columns:
-                df = df[~df['IndexName'].astype(str).str.lower().str.contains('upper|lower')].copy()
-                dfs.append(df)
-        except Exception as e:
-            print(f"Error reading index file {filename}: {e}")
-            
-    if not dfs:
-        print(f"WARNING: No index data extracted for {target_area} {year}.")
-        return
-        
-    full_df = pd.concat(dfs, ignore_index=True)
-    full_df['DeliveryStart'] = pd.to_datetime(full_df['DeliveryStart'], utc=True)
-    
-    # Filter strictly for 15-minute quarter-hourly indices
-    if 'TimeResolution' in full_df.columns:
-        df_15 = full_df[full_df['TimeResolution'].astype(str).str.contains('15', na=False)].copy()
-        if df_15.empty:
-            df_15 = full_df.copy()
-    else:
-        df_15 = full_df.copy()
-        
-    piv_price = df_15.pivot_table(index='DeliveryStart', columns='IndexName', values='IndexPrice', aggfunc='mean')
-    piv_vol = df_15.pivot_table(index='DeliveryStart', columns='IndexName', values='IndexVolume', aggfunc='sum')
-    
-    prefix = target_area.lower()
-    piv_price.columns = [f"{prefix}_id_{str(col).lower()}_price" for col in piv_price.columns]
-    piv_vol.columns = [f"{prefix}_id_{str(col).lower()}_volume" for col in piv_vol.columns]
-    
-    merged = pd.concat([piv_price, piv_vol], axis=1).reset_index()
-    merged = merged.sort_values('DeliveryStart').drop_duplicates(subset=['DeliveryStart'])
-    
-    output_file = os.path.join(output_dir, f"ID_Index_{target_area}_{year}.csv")
-    merged.to_csv(output_file, index=False)
-    print(f"Completed index processing for {target_area}_{year}: Saved to {output_file} ({len(merged)} rows)")
 
 def run_step_debugger(
     df_sub: pd.DataFrame, 
@@ -594,11 +525,11 @@ def run_step_debugger(
 
 if __name__ == '__main__':
     # Configuration for standalone execution
-    years = [2022]
+    years = [2021, 2022, 2023, 2024]
     areas = ['DE1', 'DE2', 'DE3', 'DE4', 'DE']
     out_dir = '/home/mat/Dokumente/Delivery Area EPF/Data/EPEX Intraday Continuous/'
     
     print("Starting recomputation for years 2021-2024 across all TSO zones in EPEX UTC time (Multiprocessing)...")
     for year in years:
         for area in areas:
-            calculate_id_da_utc(year=year, target_area=area, output_dir=out_dir, is_index=False)
+            calculate_id_da_utc(year=year, target_area=area, output_dir=out_dir)

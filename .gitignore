@@ -31,9 +31,7 @@
 *.txt
 *.json
 
-# Ignore raw data folders explicitly
-Data/EnergyCharts/
-Data/Auction Spot Prices/
+# Raw data folders with arbitrary binary/archive dumps
 Data/Raw/
 Data/Transactions/
 Data/EPEX Intraday Continuous/*.csv
@@ -58,8 +56,10 @@ Thumbs.db
 .vscode/
 
 # ==============================================================================
-# WHITELIST: ONLY CODE AND REPOSITORY DOCUMENTATION ALLOWED
+# WHITELIST: ONLY CODE, REPOSITORY DOCUMENTATION, AND STRUCTURE KEEPERS ALLOWED
 # ==============================================================================
 !*.py
 !README.md
+!.gitkeep
 !.gitignore
+!AGENTS.md
