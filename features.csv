@@ -1,0 +1,904 @@
+name,model,tag,category,keep,shift_needed_2h,scenario1
+Date,all,index,datetime,no,,
+Intraday Auction Price,all,input,price,yes,,x
+Dayahead_Auction_hourly,all,input,price,yes,,x
+Load,all,input,balancing,yes,x,x
+VWAP_345to360,all,input,price,yes,,x
+VWAP_330to345,all,input,price,yes,,x
+VWAP_315to330,all,input,price,yes,,x
+VWAP_300to315,all,input,price,yes,,x
+VWAP_285to300,all,input,price,yes,,x
+VWAP_270to285,all,input,price,yes,,x
+VWAP_255to270,all,input,price,yes,,x
+VWAP_240to255,all,input,price,yes,,x
+VWAP_225to240,all,input,price,yes,,x
+VWAP_210to225,all,input,price,yes,,x
+VWAP_195to210,all,input,price,yes,,x
+VWAP_180to195,all,input,price,yes,,x
+VWAP_165to180,all,input,price,yes,,x
+VWAP_150to165,all,input,price,yes,,x
+VWAP_135to150,all,input,price,yes,,x
+VWAP_120to135,all,input,price,yes,,x
+VWAP_105to120,all,input,price,yes,,x
+VWAP_90to105,all,input,price,yes,,x
+VWAP_75to90,all,input,price,pending,,x
+VWAP_60to75,all,input,price,pending,,x
+Weekday_7,all,input,datetime,yes,,x
+Weekday_1,all,input,datetime,yes,,x
+Weekday_2,all,input,datetime,yes,,x
+Weekday_3,all,input,datetime,yes,,x
+Weekday_4,all,input,datetime,yes,,x
+Weekday_5,all,input,datetime,yes,,x
+Weekday_6,all,input,datetime,yes,,x
+Hour_0,all,input,datetime,yes,,x
+Hour_1,all,input,datetime,yes,,x
+Hour_2,all,input,datetime,yes,,x
+Hour_3,all,input,datetime,yes,,x
+Hour_4,all,input,datetime,yes,,x
+Hour_5,all,input,datetime,yes,,x
+Hour_6,all,input,datetime,yes,,x
+Hour_7,all,input,datetime,yes,,x
+Hour_8,all,input,datetime,yes,,x
+Hour_9,all,input,datetime,yes,,x
+Hour_10,all,input,datetime,yes,,x
+Hour_11,all,input,datetime,yes,,x
+Hour_12,all,input,datetime,yes,,x
+Hour_13,all,input,datetime,yes,,x
+Hour_14,all,input,datetime,yes,,x
+Hour_15,all,input,datetime,yes,,x
+Hour_16,all,input,datetime,yes,,x
+Hour_17,all,input,datetime,yes,,x
+Hour_18,all,input,datetime,yes,,x
+Hour_19,all,input,datetime,yes,,x
+Hour_20,all,input,datetime,yes,,x
+Hour_21,all,input,datetime,yes,,x
+Hour_22,all,input,datetime,yes,,x
+Hour_23,all,input,datetime,yes,,x
+Quarter_1,all,input,datetime,yes,,x
+Quarter_2,all,input,datetime,yes,,x
+Quarter_3,all,input,datetime,yes,,x
+Quarter_4,all,input,datetime,yes,,x
+prediction_error_solar,all,input,error,yes,x,x
+prediction_error_offshore,all,input,error,yes,x,x
+prediction_error_onshore,all,input,error,yes,x,x
+DE4_MRL_positive,DE4,input,balancing,yes,x,x
+DE2_MRL_positive,DE2,input,balancing,yes,x,x
+DE3_MRL_positive,DE3,input,balancing,yes,x,x
+DE1_MRL_positive,DE1,input,balancing,yes,x,x
+DE_MRL_positive,all,input,balancing,yes,x,x
+DE4_MRL_negative,DE4,input,balancing,yes,x,x
+DE2_MRL_negative,DE2,input,balancing,yes,x,x
+DE3_MRL_negative,DE3,input,balancing,yes,x,x
+DE1_MRL_negative,DE1,input,balancing,yes,x,x
+DE_MRL_negative,all,input,balancing,yes,x,x
+DE4_SRL_positive,DE4,input,balancing,yes,x,x
+DE2_SRL_positive,DE2,input,balancing,yes,x,x
+DE3_SRL_positive,DE3,input,balancing,yes,x,x
+DE1_SRL_positive,DE1,input,balancing,yes,x,x
+DE_SRL_positive,all,input,balancing,yes,x,x
+DE4_SRL_negative,DE4,input,balancing,yes,x,x
+DE2_SRL_negative,DE2,input,balancing,yes,x,x
+DE3_SRL_negative,DE3,input,balancing,yes,x,x
+DE1_SRL_negative,DE1,input,balancing,yes,x,x
+DE_SRL_negative,all,input,balancing,yes,x,x
+DE1_VWAP_345to360,DE1,input,price,yes,,x
+DE1_VWAP_330to345,DE1,input,price,yes,,x
+DE1_VWAP_315to330,DE1,input,price,yes,,x
+DE1_VWAP_300to315,DE1,input,price,yes,,x
+DE1_VWAP_285to300,DE1,input,price,yes,,x
+DE1_VWAP_270to285,DE1,input,price,yes,,x
+DE1_VWAP_255to270,DE1,input,price,yes,,x
+DE1_VWAP_240to255,DE1,input,price,yes,,x
+DE1_VWAP_225to240,DE1,input,price,yes,,x
+DE1_VWAP_210to225,DE1,input,price,yes,,x
+DE1_VWAP_195to210,DE1,input,price,yes,,x
+DE1_VWAP_180to195,DE1,input,price,yes,,x
+DE1_VWAP_165to180,DE1,input,price,yes,,x
+DE1_VWAP_150to165,DE1,input,price,yes,,x
+DE1_VWAP_135to150,DE1,input,price,yes,,x
+DE1_VWAP_120to135,DE1,input,price,yes,,x
+DE1_VWAP_105to120,DE1,input,price,yes,,x
+DE1_VWAP_90to105,DE1,input,price,yes,,x
+DE1_VWAP_75to90,DE1,input,price,pending,,x
+DE1_VWAP_60to75,DE1,input,price,pending,,x
+DE1_VWAP_45to60,DE1,input,price,only past products,,x
+DE1_VWAP_30to45,DE1,input,price,only past products,,x
+DE1_VWAP_15to30,DE1,input,price,only past products,,x
+DE1_VWAP_0to15,DE1,input,price,only past products,,x
+DE1_VWAP_0to30,DE1,label,price,yes,,x
+DE1_VWAP_total_volume_345to360,DE1,input,volume,yes,,x
+DE1_VWAP_total_volume_330to345,DE1,input,volume,yes,,x
+DE1_VWAP_total_volume_315to330,DE1,input,volume,yes,,x
+DE1_VWAP_total_volume_300to315,DE1,input,volume,yes,,x
+DE1_VWAP_total_volume_285to300,DE1,input,volume,yes,,x
+DE1_VWAP_total_volume_270to285,DE1,input,volume,yes,,x
+DE1_VWAP_total_volume_255to270,DE1,input,volume,yes,,x
+DE1_VWAP_total_volume_240to255,DE1,input,volume,yes,,x
+DE1_VWAP_total_volume_225to240,DE1,input,volume,yes,,x
+DE1_VWAP_total_volume_210to225,DE1,input,volume,yes,,x
+DE1_VWAP_total_volume_195to210,DE1,input,volume,yes,,x
+DE1_VWAP_total_volume_180to195,DE1,input,volume,yes,,x
+DE1_VWAP_total_volume_165to180,DE1,input,volume,yes,,x
+DE1_VWAP_total_volume_150to165,DE1,input,volume,yes,,x
+DE1_VWAP_total_volume_135to150,DE1,input,volume,yes,,x
+DE1_VWAP_total_volume_120to135,DE1,input,volume,yes,,x
+DE1_VWAP_total_volume_105to120,DE1,input,volume,yes,,x
+DE1_VWAP_total_volume_90to105,DE1,input,volume,yes,,x
+DE1_VWAP_total_volume_75to90,DE1,input,volume,pending,,x
+DE1_VWAP_total_volume_60to75,DE1,input,volume,pending,,x
+DE1_VWAP_total_volume_45to60,DE1,input,volume,only past products,,x
+DE1_VWAP_total_volume_30to45,DE1,input,volume,only past products,,x
+DE1_VWAP_total_volume_15to30,DE1,input,volume,only past products,,x
+DE1_VWAP_total_volume_0to15,DE1,input,volume,only past products,,x
+DE1_VWAP_total_volume_0to30,DE1,input,volume,no,,
+DE1_VWAP_total_trades_345to360,DE1,input,ntrades,yes,,x
+DE1_VWAP_total_trades_330to345,DE1,input,ntrades,yes,,x
+DE1_VWAP_total_trades_315to330,DE1,input,ntrades,yes,,x
+DE1_VWAP_total_trades_300to315,DE1,input,ntrades,yes,,x
+DE1_VWAP_total_trades_285to300,DE1,input,ntrades,yes,,x
+DE1_VWAP_total_trades_270to285,DE1,input,ntrades,yes,,x
+DE1_VWAP_total_trades_255to270,DE1,input,ntrades,yes,,x
+DE1_VWAP_total_trades_240to255,DE1,input,ntrades,yes,,x
+DE1_VWAP_total_trades_225to240,DE1,input,ntrades,yes,,x
+DE1_VWAP_total_trades_210to225,DE1,input,ntrades,yes,,x
+DE1_VWAP_total_trades_195to210,DE1,input,ntrades,yes,,x
+DE1_VWAP_total_trades_180to195,DE1,input,ntrades,yes,,x
+DE1_VWAP_total_trades_165to180,DE1,input,ntrades,yes,,x
+DE1_VWAP_total_trades_150to165,DE1,input,ntrades,yes,,x
+DE1_VWAP_total_trades_135to150,DE1,input,ntrades,yes,,x
+DE1_VWAP_total_trades_120to135,DE1,input,ntrades,yes,,x
+DE1_VWAP_total_trades_105to120,DE1,input,ntrades,yes,,x
+DE1_VWAP_total_trades_90to105,DE1,input,ntrades,yes,,x
+DE1_VWAP_total_trades_75to90,DE1,input,ntrades,pending,,x
+DE1_VWAP_total_trades_60to75,DE1,input,ntrades,pending,,x
+DE1_VWAP_total_trades_45to60,DE1,input,ntrades,only past products,,x
+DE1_VWAP_total_trades_30to45,DE1,input,ntrades,only past products,,x
+DE1_VWAP_total_trades_15to30,DE1,input,ntrades,only past products,,x
+DE1_VWAP_total_trades_0to15,DE1,input,ntrades,only past products,,x
+DE1_VWAP_total_trades_0to30,DE1,input,ntrades,no,,
+DE1_id_balance_345to360,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE2_345to360,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE3_345to360,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE4_345to360,DE1,input,balance,yes,,x
+DE1_id_trade_to_self_345to360,DE1,input,balance,yes,,x
+DE1_id_balance_330to345,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE2_330to345,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE3_330to345,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE4_330to345,DE1,input,balance,yes,,x
+DE1_id_trade_to_self_330to345,DE1,input,balance,yes,,x
+DE1_id_balance_315to330,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE2_315to330,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE3_315to330,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE4_315to330,DE1,input,balance,yes,,x
+DE1_id_trade_to_self_315to330,DE1,input,balance,yes,,x
+DE1_id_balance_300to315,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE2_300to315,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE3_300to315,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE4_300to315,DE1,input,balance,yes,,x
+DE1_id_trade_to_self_300to315,DE1,input,balance,yes,,x
+DE1_id_balance_285to300,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE2_285to300,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE3_285to300,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE4_285to300,DE1,input,balance,yes,,x
+DE1_id_trade_to_self_285to300,DE1,input,balance,yes,,x
+DE1_id_balance_270to285,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE2_270to285,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE3_270to285,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE4_270to285,DE1,input,balance,yes,,x
+DE1_id_trade_to_self_270to285,DE1,input,balance,yes,,x
+DE1_id_balance_255to270,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE2_255to270,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE3_255to270,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE4_255to270,DE1,input,balance,yes,,x
+DE1_id_trade_to_self_255to270,DE1,input,balance,yes,,x
+DE1_id_balance_240to255,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE2_240to255,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE3_240to255,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE4_240to255,DE1,input,balance,yes,,x
+DE1_id_trade_to_self_240to255,DE1,input,balance,yes,,x
+DE1_id_balance_225to240,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE2_225to240,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE3_225to240,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE4_225to240,DE1,input,balance,yes,,x
+DE1_id_trade_to_self_225to240,DE1,input,balance,yes,,x
+DE1_id_balance_210to225,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE2_210to225,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE3_210to225,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE4_210to225,DE1,input,balance,yes,,x
+DE1_id_trade_to_self_210to225,DE1,input,balance,yes,,x
+DE1_id_balance_195to210,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE2_195to210,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE3_195to210,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE4_195to210,DE1,input,balance,yes,,x
+DE1_id_trade_to_self_195to210,DE1,input,balance,yes,,x
+DE1_id_balance_180to195,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE2_180to195,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE3_180to195,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE4_180to195,DE1,input,balance,yes,,x
+DE1_id_trade_to_self_180to195,DE1,input,balance,yes,,x
+DE1_id_balance_165to180,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE2_165to180,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE3_165to180,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE4_165to180,DE1,input,balance,yes,,x
+DE1_id_trade_to_self_165to180,DE1,input,balance,yes,,x
+DE1_id_balance_150to165,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE2_150to165,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE3_150to165,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE4_150to165,DE1,input,balance,yes,,x
+DE1_id_trade_to_self_150to165,DE1,input,balance,yes,,x
+DE1_id_balance_135to150,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE2_135to150,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE3_135to150,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE4_135to150,DE1,input,balance,yes,,x
+DE1_id_trade_to_self_135to150,DE1,input,balance,yes,,x
+DE1_id_balance_120to135,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE2_120to135,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE3_120to135,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE4_120to135,DE1,input,balance,yes,,x
+DE1_id_trade_to_self_120to135,DE1,input,balance,yes,,x
+DE1_id_balance_105to120,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE2_105to120,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE3_105to120,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE4_105to120,DE1,input,balance,yes,,x
+DE1_id_trade_to_self_105to120,DE1,input,balance,yes,,x
+DE1_id_balance_90to105,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE2_90to105,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE3_90to105,DE1,input,balance,yes,,x
+DE1_id_balance_to_DE4_90to105,DE1,input,balance,yes,,x
+DE1_id_trade_to_self_90to105,DE1,input,balance,yes,,x
+DE1_id_balance_75to90,DE1,input,balance,pending,,x
+DE1_id_balance_to_DE2_75to90,DE1,input,balance,pending,,x
+DE1_id_balance_to_DE3_75to90,DE1,input,balance,pending,,x
+DE1_id_balance_to_DE4_75to90,DE1,input,balance,pending,,x
+DE1_id_trade_to_self_75to90,DE1,input,balance,pending,,x
+DE1_id_balance_60to75,DE1,input,balance,pending,,x
+DE1_id_balance_to_DE2_60to75,DE1,input,balance,pending,,x
+DE1_id_balance_to_DE3_60to75,DE1,input,balance,pending,,x
+DE1_id_balance_to_DE4_60to75,DE1,input,balance,pending,,x
+DE1_id_trade_to_self_60to75,DE1,input,balance,pending,,x
+DE1_id_balance_45to60,DE1,input,balance,only past products,,x
+DE1_id_balance_to_DE2_45to60,DE1,input,balance,only past products,,x
+DE1_id_balance_to_DE3_45to60,DE1,input,balance,only past products,,x
+DE1_id_balance_to_DE4_45to60,DE1,input,balance,only past products,,x
+DE1_id_trade_to_self_45to60,DE1,input,balance,only past products,,x
+DE1_id_balance_30to45,DE1,input,balance,only past products,,x
+DE1_id_balance_to_DE2_30to45,DE1,input,balance,only past products,,x
+DE1_id_balance_to_DE3_30to45,DE1,input,balance,only past products,,x
+DE1_id_balance_to_DE4_30to45,DE1,input,balance,only past products,,x
+DE1_id_trade_to_self_30to45,DE1,input,balance,only past products,,x
+DE1_id_trade_to_self_15to30,DE1,input,balance,only past products,,x
+DE1_id_trade_to_self_0to15,DE1,input,balance,only past products,,x
+DE1_id_trade_to_self_0to30,DE1,input,balance,no,,x
+DE2_VWAP_345to360,DE2,input,price,yes,,x
+DE2_VWAP_330to345,DE2,input,price,yes,,x
+DE2_VWAP_315to330,DE2,input,price,yes,,x
+DE2_VWAP_300to315,DE2,input,price,yes,,x
+DE2_VWAP_285to300,DE2,input,price,yes,,x
+DE2_VWAP_270to285,DE2,input,price,yes,,x
+DE2_VWAP_255to270,DE2,input,price,yes,,x
+DE2_VWAP_240to255,DE2,input,price,yes,,x
+DE2_VWAP_225to240,DE2,input,price,yes,,x
+DE2_VWAP_210to225,DE2,input,price,yes,,x
+DE2_VWAP_195to210,DE2,input,price,yes,,x
+DE2_VWAP_180to195,DE2,input,price,yes,,x
+DE2_VWAP_165to180,DE2,input,price,yes,,x
+DE2_VWAP_150to165,DE2,input,price,yes,,x
+DE2_VWAP_135to150,DE2,input,price,yes,,x
+DE2_VWAP_120to135,DE2,input,price,yes,,x
+DE2_VWAP_105to120,DE2,input,price,yes,,x
+DE2_VWAP_90to105,DE2,input,price,yes,,x
+DE2_VWAP_75to90,DE2,input,price,pending,,x
+DE2_VWAP_60to75,DE2,input,price,pending,,x
+DE2_VWAP_45to60,DE2,input,price,only past products,,x
+DE2_VWAP_30to45,DE2,input,price,only past products,,x
+DE2_VWAP_15to30,DE2,input,price,only past products,,x
+DE2_VWAP_0to15,DE2,input,price,only past products,,x
+DE2_VWAP_0to30,DE2,label,price,yes,,x
+DE2_VWAP_total_volume_345to360,DE2,input,volume,yes,,x
+DE2_VWAP_total_volume_330to345,DE2,input,volume,yes,,x
+DE2_VWAP_total_volume_315to330,DE2,input,volume,yes,,x
+DE2_VWAP_total_volume_300to315,DE2,input,volume,yes,,x
+DE2_VWAP_total_volume_285to300,DE2,input,volume,yes,,x
+DE2_VWAP_total_volume_270to285,DE2,input,volume,yes,,x
+DE2_VWAP_total_volume_255to270,DE2,input,volume,yes,,x
+DE2_VWAP_total_volume_240to255,DE2,input,volume,yes,,x
+DE2_VWAP_total_volume_225to240,DE2,input,volume,yes,,x
+DE2_VWAP_total_volume_210to225,DE2,input,volume,yes,,x
+DE2_VWAP_total_volume_195to210,DE2,input,volume,yes,,x
+DE2_VWAP_total_volume_180to195,DE2,input,volume,yes,,x
+DE2_VWAP_total_volume_165to180,DE2,input,volume,yes,,x
+DE2_VWAP_total_volume_150to165,DE2,input,volume,yes,,x
+DE2_VWAP_total_volume_135to150,DE2,input,volume,yes,,x
+DE2_VWAP_total_volume_120to135,DE2,input,volume,yes,,x
+DE2_VWAP_total_volume_105to120,DE2,input,volume,yes,,x
+DE2_VWAP_total_volume_90to105,DE2,input,volume,yes,,x
+DE2_VWAP_total_volume_75to90,DE2,input,volume,pending,,x
+DE2_VWAP_total_volume_60to75,DE2,input,volume,pending,,x
+DE2_VWAP_total_volume_45to60,DE2,input,volume,only past products,,x
+DE2_VWAP_total_volume_30to45,DE2,input,volume,only past products,,x
+DE2_VWAP_total_volume_15to30,DE2,input,volume,only past products,,x
+DE2_VWAP_total_volume_0to15,DE2,input,volume,only past products,,x
+DE2_VWAP_total_volume_0to30,DE2,input,volume,no,,
+DE2_VWAP_total_trades_345to360,DE2,input,ntrades,yes,,x
+DE2_VWAP_total_trades_330to345,DE2,input,ntrades,yes,,x
+DE2_VWAP_total_trades_315to330,DE2,input,ntrades,yes,,x
+DE2_VWAP_total_trades_300to315,DE2,input,ntrades,yes,,x
+DE2_VWAP_total_trades_285to300,DE2,input,ntrades,yes,,x
+DE2_VWAP_total_trades_270to285,DE2,input,ntrades,yes,,x
+DE2_VWAP_total_trades_255to270,DE2,input,ntrades,yes,,x
+DE2_VWAP_total_trades_240to255,DE2,input,ntrades,yes,,x
+DE2_VWAP_total_trades_225to240,DE2,input,ntrades,yes,,x
+DE2_VWAP_total_trades_210to225,DE2,input,ntrades,yes,,x
+DE2_VWAP_total_trades_195to210,DE2,input,ntrades,yes,,x
+DE2_VWAP_total_trades_180to195,DE2,input,ntrades,yes,,x
+DE2_VWAP_total_trades_165to180,DE2,input,ntrades,yes,,x
+DE2_VWAP_total_trades_150to165,DE2,input,ntrades,yes,,x
+DE2_VWAP_total_trades_135to150,DE2,input,ntrades,yes,,x
+DE2_VWAP_total_trades_120to135,DE2,input,ntrades,yes,,x
+DE2_VWAP_total_trades_105to120,DE2,input,ntrades,yes,,x
+DE2_VWAP_total_trades_90to105,DE2,input,ntrades,yes,,x
+DE2_VWAP_total_trades_75to90,DE2,input,ntrades,pending,,x
+DE2_VWAP_total_trades_60to75,DE2,input,ntrades,pending,,x
+DE2_VWAP_total_trades_45to60,DE2,input,ntrades,only past products,,x
+DE2_VWAP_total_trades_30to45,DE2,input,ntrades,only past products,,x
+DE2_VWAP_total_trades_15to30,DE2,input,ntrades,only past products,,x
+DE2_VWAP_total_trades_0to15,DE2,input,ntrades,only past products,,x
+DE2_VWAP_total_trades_0to30,DE2,input,ntrades,no,,
+DE2_id_balance_345to360,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE1_345to360,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE3_345to360,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE4_345to360,DE2,input,balance,yes,,x
+DE2_id_trade_to_self_345to360,DE2,input,balance,yes,,x
+DE2_id_balance_330to345,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE1_330to345,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE3_330to345,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE4_330to345,DE2,input,balance,yes,,x
+DE2_id_trade_to_self_330to345,DE2,input,balance,yes,,x
+DE2_id_balance_315to330,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE1_315to330,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE3_315to330,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE4_315to330,DE2,input,balance,yes,,x
+DE2_id_trade_to_self_315to330,DE2,input,balance,yes,,x
+DE2_id_balance_300to315,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE1_300to315,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE3_300to315,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE4_300to315,DE2,input,balance,yes,,x
+DE2_id_trade_to_self_300to315,DE2,input,balance,yes,,x
+DE2_id_balance_285to300,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE1_285to300,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE3_285to300,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE4_285to300,DE2,input,balance,yes,,x
+DE2_id_trade_to_self_285to300,DE2,input,balance,yes,,x
+DE2_id_balance_270to285,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE1_270to285,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE3_270to285,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE4_270to285,DE2,input,balance,yes,,x
+DE2_id_trade_to_self_270to285,DE2,input,balance,yes,,x
+DE2_id_balance_255to270,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE1_255to270,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE3_255to270,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE4_255to270,DE2,input,balance,yes,,x
+DE2_id_trade_to_self_255to270,DE2,input,balance,yes,,x
+DE2_id_balance_240to255,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE1_240to255,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE3_240to255,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE4_240to255,DE2,input,balance,yes,,x
+DE2_id_trade_to_self_240to255,DE2,input,balance,yes,,x
+DE2_id_balance_225to240,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE1_225to240,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE3_225to240,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE4_225to240,DE2,input,balance,yes,,x
+DE2_id_trade_to_self_225to240,DE2,input,balance,yes,,x
+DE2_id_balance_210to225,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE1_210to225,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE3_210to225,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE4_210to225,DE2,input,balance,yes,,x
+DE2_id_trade_to_self_210to225,DE2,input,balance,yes,,x
+DE2_id_balance_195to210,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE1_195to210,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE3_195to210,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE4_195to210,DE2,input,balance,yes,,x
+DE2_id_trade_to_self_195to210,DE2,input,balance,yes,,x
+DE2_id_balance_180to195,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE1_180to195,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE3_180to195,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE4_180to195,DE2,input,balance,yes,,x
+DE2_id_trade_to_self_180to195,DE2,input,balance,yes,,x
+DE2_id_balance_165to180,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE1_165to180,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE3_165to180,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE4_165to180,DE2,input,balance,yes,,x
+DE2_id_trade_to_self_165to180,DE2,input,balance,yes,,x
+DE2_id_balance_150to165,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE1_150to165,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE3_150to165,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE4_150to165,DE2,input,balance,yes,,x
+DE2_id_trade_to_self_150to165,DE2,input,balance,yes,,x
+DE2_id_balance_135to150,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE1_135to150,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE3_135to150,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE4_135to150,DE2,input,balance,yes,,x
+DE2_id_trade_to_self_135to150,DE2,input,balance,yes,,x
+DE2_id_balance_120to135,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE1_120to135,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE3_120to135,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE4_120to135,DE2,input,balance,yes,,x
+DE2_id_trade_to_self_120to135,DE2,input,balance,yes,,x
+DE2_id_balance_105to120,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE1_105to120,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE3_105to120,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE4_105to120,DE2,input,balance,yes,,x
+DE2_id_trade_to_self_105to120,DE2,input,balance,yes,,x
+DE2_id_balance_90to105,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE1_90to105,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE3_90to105,DE2,input,balance,yes,,x
+DE2_id_balance_to_DE4_90to105,DE2,input,balance,yes,,x
+DE2_id_trade_to_self_90to105,DE2,input,balance,yes,,x
+DE2_id_balance_75to90,DE2,input,balance,pending,,x
+DE2_id_balance_to_DE1_75to90,DE2,input,balance,pending,,x
+DE2_id_balance_to_DE3_75to90,DE2,input,balance,pending,,x
+DE2_id_balance_to_DE4_75to90,DE2,input,balance,pending,,x
+DE2_id_trade_to_self_75to90,DE2,input,balance,pending,,x
+DE2_id_balance_60to75,DE2,input,balance,pending,,x
+DE2_id_balance_to_DE1_60to75,DE2,input,balance,pending,,x
+DE2_id_balance_to_DE3_60to75,DE2,input,balance,pending,,x
+DE2_id_balance_to_DE4_60to75,DE2,input,balance,pending,,x
+DE2_id_trade_to_self_60to75,DE2,input,balance,pending,,x
+DE2_id_balance_45to60,DE2,input,balance,only past products,,x
+DE2_id_balance_to_DE1_45to60,DE2,input,balance,only past products,,x
+DE2_id_balance_to_DE3_45to60,DE2,input,balance,only past products,,x
+DE2_id_balance_to_DE4_45to60,DE2,input,balance,only past products,,x
+DE2_id_trade_to_self_45to60,DE2,input,balance,only past products,,x
+DE2_id_balance_30to45,DE2,input,balance,only past products,,x
+DE2_id_balance_to_DE1_30to45,DE2,input,balance,only past products,,x
+DE2_id_balance_to_DE3_30to45,DE2,input,balance,only past products,,x
+DE2_id_balance_to_DE4_30to45,DE2,input,balance,only past products,,x
+DE2_id_trade_to_self_30to45,DE2,input,balance,only past products,,x
+DE2_id_trade_to_self_15to30,DE2,input,balance,only past products,,x
+DE2_id_trade_to_self_0to15,DE2,input,balance,only past products,,x
+DE2_id_trade_to_self_0to30,DE2,input,balance,no,,x
+DE3_VWAP_345to360,DE3,input,price,yes,,x
+DE3_VWAP_330to345,DE3,input,price,yes,,x
+DE3_VWAP_315to330,DE3,input,price,yes,,x
+DE3_VWAP_300to315,DE3,input,price,yes,,x
+DE3_VWAP_285to300,DE3,input,price,yes,,x
+DE3_VWAP_270to285,DE3,input,price,yes,,x
+DE3_VWAP_255to270,DE3,input,price,yes,,x
+DE3_VWAP_240to255,DE3,input,price,yes,,x
+DE3_VWAP_225to240,DE3,input,price,yes,,x
+DE3_VWAP_210to225,DE3,input,price,yes,,x
+DE3_VWAP_195to210,DE3,input,price,yes,,x
+DE3_VWAP_180to195,DE3,input,price,yes,,x
+DE3_VWAP_165to180,DE3,input,price,yes,,x
+DE3_VWAP_150to165,DE3,input,price,yes,,x
+DE3_VWAP_135to150,DE3,input,price,yes,,x
+DE3_VWAP_120to135,DE3,input,price,yes,,x
+DE3_VWAP_105to120,DE3,input,price,yes,,x
+DE3_VWAP_90to105,DE3,input,price,yes,,x
+DE3_VWAP_75to90,DE3,input,price,pending,,x
+DE3_VWAP_60to75,DE3,input,price,pending,,x
+DE3_VWAP_45to60,DE3,input,price,only past products,,x
+DE3_VWAP_30to45,DE3,input,price,only past products,,x
+DE3_VWAP_15to30,DE3,input,price,only past products,,x
+DE3_VWAP_0to15,DE3,input,price,only past products,,x
+DE3_VWAP_0to30,DE3,label,price,yes,,x
+DE3_VWAP_total_volume_345to360,DE3,input,volume,yes,,x
+DE3_VWAP_total_volume_330to345,DE3,input,volume,yes,,x
+DE3_VWAP_total_volume_315to330,DE3,input,volume,yes,,x
+DE3_VWAP_total_volume_300to315,DE3,input,volume,yes,,x
+DE3_VWAP_total_volume_285to300,DE3,input,volume,yes,,x
+DE3_VWAP_total_volume_270to285,DE3,input,volume,yes,,x
+DE3_VWAP_total_volume_255to270,DE3,input,volume,yes,,x
+DE3_VWAP_total_volume_240to255,DE3,input,volume,yes,,x
+DE3_VWAP_total_volume_225to240,DE3,input,volume,yes,,x
+DE3_VWAP_total_volume_210to225,DE3,input,volume,yes,,x
+DE3_VWAP_total_volume_195to210,DE3,input,volume,yes,,x
+DE3_VWAP_total_volume_180to195,DE3,input,volume,yes,,x
+DE3_VWAP_total_volume_165to180,DE3,input,volume,yes,,x
+DE3_VWAP_total_volume_150to165,DE3,input,volume,yes,,x
+DE3_VWAP_total_volume_135to150,DE3,input,volume,yes,,x
+DE3_VWAP_total_volume_120to135,DE3,input,volume,yes,,x
+DE3_VWAP_total_volume_105to120,DE3,input,volume,yes,,x
+DE3_VWAP_total_volume_90to105,DE3,input,volume,yes,,x
+DE3_VWAP_total_volume_75to90,DE3,input,volume,pending,,x
+DE3_VWAP_total_volume_60to75,DE3,input,volume,pending,,x
+DE3_VWAP_total_volume_45to60,DE3,input,volume,only past products,,x
+DE3_VWAP_total_volume_30to45,DE3,input,volume,only past products,,x
+DE3_VWAP_total_volume_15to30,DE3,input,volume,only past products,,x
+DE3_VWAP_total_volume_0to15,DE3,input,volume,only past products,,x
+DE3_VWAP_total_volume_0to30,DE3,input,volume,no,,
+DE3_VWAP_total_trades_345to360,DE3,input,ntrades,yes,,x
+DE3_VWAP_total_trades_330to345,DE3,input,ntrades,yes,,x
+DE3_VWAP_total_trades_315to330,DE3,input,ntrades,yes,,x
+DE3_VWAP_total_trades_300to315,DE3,input,ntrades,yes,,x
+DE3_VWAP_total_trades_285to300,DE3,input,ntrades,yes,,x
+DE3_VWAP_total_trades_270to285,DE3,input,ntrades,yes,,x
+DE3_VWAP_total_trades_255to270,DE3,input,ntrades,yes,,x
+DE3_VWAP_total_trades_240to255,DE3,input,ntrades,yes,,x
+DE3_VWAP_total_trades_225to240,DE3,input,ntrades,yes,,x
+DE3_VWAP_total_trades_210to225,DE3,input,ntrades,yes,,x
+DE3_VWAP_total_trades_195to210,DE3,input,ntrades,yes,,x
+DE3_VWAP_total_trades_180to195,DE3,input,ntrades,yes,,x
+DE3_VWAP_total_trades_165to180,DE3,input,ntrades,yes,,x
+DE3_VWAP_total_trades_150to165,DE3,input,ntrades,yes,,x
+DE3_VWAP_total_trades_135to150,DE3,input,ntrades,yes,,x
+DE3_VWAP_total_trades_120to135,DE3,input,ntrades,yes,,x
+DE3_VWAP_total_trades_105to120,DE3,input,ntrades,yes,,x
+DE3_VWAP_total_trades_90to105,DE3,input,ntrades,yes,,x
+DE3_VWAP_total_trades_75to90,DE3,input,ntrades,pending,,x
+DE3_VWAP_total_trades_60to75,DE3,input,ntrades,pending,,x
+DE3_VWAP_total_trades_45to60,DE3,input,ntrades,only past products,,x
+DE3_VWAP_total_trades_30to45,DE3,input,ntrades,only past products,,x
+DE3_VWAP_total_trades_15to30,DE3,input,ntrades,only past products,,x
+DE3_VWAP_total_trades_0to15,DE3,input,ntrades,only past products,,x
+DE3_VWAP_total_trades_0to30,DE3,input,ntrades,no,,
+DE3_id_balance_345to360,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE1_345to360,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE2_345to360,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE4_345to360,DE3,input,balance,yes,,x
+DE3_id_trade_to_self_345to360,DE3,input,balance,yes,,x
+DE3_id_balance_330to345,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE1_330to345,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE2_330to345,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE4_330to345,DE3,input,balance,yes,,x
+DE3_id_trade_to_self_330to345,DE3,input,balance,yes,,x
+DE3_id_balance_315to330,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE1_315to330,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE2_315to330,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE4_315to330,DE3,input,balance,yes,,x
+DE3_id_trade_to_self_315to330,DE3,input,balance,yes,,x
+DE3_id_balance_300to315,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE1_300to315,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE2_300to315,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE4_300to315,DE3,input,balance,yes,,x
+DE3_id_trade_to_self_300to315,DE3,input,balance,yes,,x
+DE3_id_balance_285to300,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE1_285to300,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE2_285to300,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE4_285to300,DE3,input,balance,yes,,x
+DE3_id_trade_to_self_285to300,DE3,input,balance,yes,,x
+DE3_id_balance_270to285,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE1_270to285,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE2_270to285,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE4_270to285,DE3,input,balance,yes,,x
+DE3_id_trade_to_self_270to285,DE3,input,balance,yes,,x
+DE3_id_balance_255to270,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE1_255to270,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE2_255to270,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE4_255to270,DE3,input,balance,yes,,x
+DE3_id_trade_to_self_255to270,DE3,input,balance,yes,,x
+DE3_id_balance_240to255,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE1_240to255,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE2_240to255,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE4_240to255,DE3,input,balance,yes,,x
+DE3_id_trade_to_self_240to255,DE3,input,balance,yes,,x
+DE3_id_balance_225to240,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE1_225to240,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE2_225to240,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE4_225to240,DE3,input,balance,yes,,x
+DE3_id_trade_to_self_225to240,DE3,input,balance,yes,,x
+DE3_id_balance_210to225,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE1_210to225,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE2_210to225,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE4_210to225,DE3,input,balance,yes,,x
+DE3_id_trade_to_self_210to225,DE3,input,balance,yes,,x
+DE3_id_balance_195to210,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE1_195to210,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE2_195to210,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE4_195to210,DE3,input,balance,yes,,x
+DE3_id_trade_to_self_195to210,DE3,input,balance,yes,,x
+DE3_id_balance_180to195,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE1_180to195,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE2_180to195,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE4_180to195,DE3,input,balance,yes,,x
+DE3_id_trade_to_self_180to195,DE3,input,balance,yes,,x
+DE3_id_balance_165to180,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE1_165to180,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE2_165to180,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE4_165to180,DE3,input,balance,yes,,x
+DE3_id_trade_to_self_165to180,DE3,input,balance,yes,,x
+DE3_id_balance_150to165,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE1_150to165,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE2_150to165,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE4_150to165,DE3,input,balance,yes,,x
+DE3_id_trade_to_self_150to165,DE3,input,balance,yes,,x
+DE3_id_balance_135to150,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE1_135to150,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE2_135to150,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE4_135to150,DE3,input,balance,yes,,x
+DE3_id_trade_to_self_135to150,DE3,input,balance,yes,,x
+DE3_id_balance_120to135,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE1_120to135,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE2_120to135,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE4_120to135,DE3,input,balance,yes,,x
+DE3_id_trade_to_self_120to135,DE3,input,balance,yes,,x
+DE3_id_balance_105to120,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE1_105to120,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE2_105to120,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE4_105to120,DE3,input,balance,yes,,x
+DE3_id_trade_to_self_105to120,DE3,input,balance,yes,,x
+DE3_id_balance_90to105,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE1_90to105,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE2_90to105,DE3,input,balance,yes,,x
+DE3_id_balance_to_DE4_90to105,DE3,input,balance,yes,,x
+DE3_id_trade_to_self_90to105,DE3,input,balance,yes,,x
+DE3_id_balance_75to90,DE3,input,balance,pending,,x
+DE3_id_balance_to_DE1_75to90,DE3,input,balance,pending,,x
+DE3_id_balance_to_DE2_75to90,DE3,input,balance,pending,,x
+DE3_id_balance_to_DE4_75to90,DE3,input,balance,pending,,x
+DE3_id_trade_to_self_75to90,DE3,input,balance,pending,,x
+DE3_id_balance_60to75,DE3,input,balance,pending,,x
+DE3_id_balance_to_DE1_60to75,DE3,input,balance,pending,,x
+DE3_id_balance_to_DE2_60to75,DE3,input,balance,pending,,x
+DE3_id_balance_to_DE4_60to75,DE3,input,balance,pending,,x
+DE3_id_trade_to_self_60to75,DE3,input,balance,pending,,x
+DE3_id_balance_45to60,DE3,input,balance,only past products,,x
+DE3_id_balance_to_DE1_45to60,DE3,input,balance,only past products,,x
+DE3_id_balance_to_DE2_45to60,DE3,input,balance,only past products,,x
+DE3_id_balance_to_DE4_45to60,DE3,input,balance,only past products,,x
+DE3_id_trade_to_self_45to60,DE3,input,balance,only past products,,x
+DE3_id_balance_30to45,DE3,input,balance,only past products,,x
+DE3_id_balance_to_DE1_30to45,DE3,input,balance,only past products,,x
+DE3_id_balance_to_DE2_30to45,DE3,input,balance,only past products,,x
+DE3_id_balance_to_DE4_30to45,DE3,input,balance,only past products,,x
+DE3_id_trade_to_self_30to45,DE3,input,balance,only past products,,x
+DE3_id_trade_to_self_15to30,DE3,input,balance,only past products,,x
+DE3_id_trade_to_self_0to15,DE3,input,balance,only past products,,x
+DE3_id_trade_to_self_0to30,DE3,input,balance,no,,x
+DE4_VWAP_345to360,DE4,input,price,yes,,x
+DE4_VWAP_330to345,DE4,input,price,yes,,x
+DE4_VWAP_315to330,DE4,input,price,yes,,x
+DE4_VWAP_300to315,DE4,input,price,yes,,x
+DE4_VWAP_285to300,DE4,input,price,yes,,x
+DE4_VWAP_270to285,DE4,input,price,yes,,x
+DE4_VWAP_255to270,DE4,input,price,yes,,x
+DE4_VWAP_240to255,DE4,input,price,yes,,x
+DE4_VWAP_225to240,DE4,input,price,yes,,x
+DE4_VWAP_210to225,DE4,input,price,yes,,x
+DE4_VWAP_195to210,DE4,input,price,yes,,x
+DE4_VWAP_180to195,DE4,input,price,yes,,x
+DE4_VWAP_165to180,DE4,input,price,yes,,x
+DE4_VWAP_150to165,DE4,input,price,yes,,x
+DE4_VWAP_135to150,DE4,input,price,yes,,x
+DE4_VWAP_120to135,DE4,input,price,yes,,x
+DE4_VWAP_105to120,DE4,input,price,yes,,x
+DE4_VWAP_90to105,DE4,input,price,yes,,x
+DE4_VWAP_75to90,DE4,input,price,pending,,x
+DE4_VWAP_60to75,DE4,input,price,pending,,x
+DE4_VWAP_45to60,DE4,input,price,only past products,,x
+DE4_VWAP_30to45,DE4,input,price,only past products,,x
+DE4_VWAP_15to30,DE4,input,price,only past products,,x
+DE4_VWAP_0to15,DE4,input,price,only past products,,x
+DE4_VWAP_0to30,DE4,label,price,yes,,x
+DE4_VWAP_total_volume_345to360,DE4,input,volume,yes,,x
+DE4_VWAP_total_volume_330to345,DE4,input,volume,yes,,x
+DE4_VWAP_total_volume_315to330,DE4,input,volume,yes,,x
+DE4_VWAP_total_volume_300to315,DE4,input,volume,yes,,x
+DE4_VWAP_total_volume_285to300,DE4,input,volume,yes,,x
+DE4_VWAP_total_volume_270to285,DE4,input,volume,yes,,x
+DE4_VWAP_total_volume_255to270,DE4,input,volume,yes,,x
+DE4_VWAP_total_volume_240to255,DE4,input,volume,yes,,x
+DE4_VWAP_total_volume_225to240,DE4,input,volume,yes,,x
+DE4_VWAP_total_volume_210to225,DE4,input,volume,yes,,x
+DE4_VWAP_total_volume_195to210,DE4,input,volume,yes,,x
+DE4_VWAP_total_volume_180to195,DE4,input,volume,yes,,x
+DE4_VWAP_total_volume_165to180,DE4,input,volume,yes,,x
+DE4_VWAP_total_volume_150to165,DE4,input,volume,yes,,x
+DE4_VWAP_total_volume_135to150,DE4,input,volume,yes,,x
+DE4_VWAP_total_volume_120to135,DE4,input,volume,yes,,x
+DE4_VWAP_total_volume_105to120,DE4,input,volume,yes,,x
+DE4_VWAP_total_volume_90to105,DE4,input,volume,yes,,x
+DE4_VWAP_total_volume_75to90,DE4,input,volume,pending,,x
+DE4_VWAP_total_volume_60to75,DE4,input,volume,pending,,x
+DE4_VWAP_total_volume_45to60,DE4,input,volume,only past products,,x
+DE4_VWAP_total_volume_30to45,DE4,input,volume,only past products,,x
+DE4_VWAP_total_volume_15to30,DE4,input,volume,only past products,,x
+DE4_VWAP_total_volume_0to15,DE4,input,volume,only past products,,x
+DE4_VWAP_total_volume_0to30,DE4,input,volume,no,,
+DE4_VWAP_total_trades_345to360,DE4,input,ntrades,yes,,x
+DE4_VWAP_total_trades_330to345,DE4,input,ntrades,yes,,x
+DE4_VWAP_total_trades_315to330,DE4,input,ntrades,yes,,x
+DE4_VWAP_total_trades_300to315,DE4,input,ntrades,yes,,x
+DE4_VWAP_total_trades_285to300,DE4,input,ntrades,yes,,x
+DE4_VWAP_total_trades_270to285,DE4,input,ntrades,yes,,x
+DE4_VWAP_total_trades_255to270,DE4,input,ntrades,yes,,x
+DE4_VWAP_total_trades_240to255,DE4,input,ntrades,yes,,x
+DE4_VWAP_total_trades_225to240,DE4,input,ntrades,yes,,x
+DE4_VWAP_total_trades_210to225,DE4,input,ntrades,yes,,x
+DE4_VWAP_total_trades_195to210,DE4,input,ntrades,yes,,x
+DE4_VWAP_total_trades_180to195,DE4,input,ntrades,yes,,x
+DE4_VWAP_total_trades_165to180,DE4,input,ntrades,yes,,x
+DE4_VWAP_total_trades_150to165,DE4,input,ntrades,yes,,x
+DE4_VWAP_total_trades_135to150,DE4,input,ntrades,yes,,x
+DE4_VWAP_total_trades_120to135,DE4,input,ntrades,yes,,x
+DE4_VWAP_total_trades_105to120,DE4,input,ntrades,yes,,x
+DE4_VWAP_total_trades_90to105,DE4,input,ntrades,yes,,x
+DE4_VWAP_total_trades_75to90,DE4,input,ntrades,pending,,x
+DE4_VWAP_total_trades_60to75,DE4,input,ntrades,pending,,x
+DE4_VWAP_total_trades_45to60,DE4,input,ntrades,only past products,,x
+DE4_VWAP_total_trades_30to45,DE4,input,ntrades,only past products,,x
+DE4_VWAP_total_trades_15to30,DE4,input,ntrades,only past products,,x
+DE4_VWAP_total_trades_0to15,DE4,input,ntrades,only past products,,x
+DE4_VWAP_total_trades_0to30,DE4,input,ntrades,no,,
+DE4_id_balance_345to360,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE1_345to360,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE2_345to360,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE3_345to360,DE4,input,balance,yes,,x
+DE4_id_trade_to_self_345to360,DE4,input,balance,yes,,x
+DE4_id_balance_330to345,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE1_330to345,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE2_330to345,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE3_330to345,DE4,input,balance,yes,,x
+DE4_id_trade_to_self_330to345,DE4,input,balance,yes,,x
+DE4_id_balance_315to330,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE1_315to330,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE2_315to330,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE3_315to330,DE4,input,balance,yes,,x
+DE4_id_trade_to_self_315to330,DE4,input,balance,yes,,x
+DE4_id_balance_300to315,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE1_300to315,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE2_300to315,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE3_300to315,DE4,input,balance,yes,,x
+DE4_id_trade_to_self_300to315,DE4,input,balance,yes,,x
+DE4_id_balance_285to300,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE1_285to300,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE2_285to300,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE3_285to300,DE4,input,balance,yes,,x
+DE4_id_trade_to_self_285to300,DE4,input,balance,yes,,x
+DE4_id_balance_270to285,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE1_270to285,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE2_270to285,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE3_270to285,DE4,input,balance,yes,,x
+DE4_id_trade_to_self_270to285,DE4,input,balance,yes,,x
+DE4_id_balance_255to270,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE1_255to270,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE2_255to270,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE3_255to270,DE4,input,balance,yes,,x
+DE4_id_trade_to_self_255to270,DE4,input,balance,yes,,x
+DE4_id_balance_240to255,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE1_240to255,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE2_240to255,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE3_240to255,DE4,input,balance,yes,,x
+DE4_id_trade_to_self_240to255,DE4,input,balance,yes,,x
+DE4_id_balance_225to240,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE1_225to240,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE2_225to240,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE3_225to240,DE4,input,balance,yes,,x
+DE4_id_trade_to_self_225to240,DE4,input,balance,yes,,x
+DE4_id_balance_210to225,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE1_210to225,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE2_210to225,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE3_210to225,DE4,input,balance,yes,,x
+DE4_id_trade_to_self_210to225,DE4,input,balance,yes,,x
+DE4_id_balance_195to210,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE1_195to210,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE2_195to210,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE3_195to210,DE4,input,balance,yes,,x
+DE4_id_trade_to_self_195to210,DE4,input,balance,yes,,x
+DE4_id_balance_180to195,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE1_180to195,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE2_180to195,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE3_180to195,DE4,input,balance,yes,,x
+DE4_id_trade_to_self_180to195,DE4,input,balance,yes,,x
+DE4_id_balance_165to180,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE1_165to180,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE2_165to180,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE3_165to180,DE4,input,balance,yes,,x
+DE4_id_trade_to_self_165to180,DE4,input,balance,yes,,x
+DE4_id_balance_150to165,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE1_150to165,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE2_150to165,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE3_150to165,DE4,input,balance,yes,,x
+DE4_id_trade_to_self_150to165,DE4,input,balance,yes,,x
+DE4_id_balance_135to150,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE1_135to150,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE2_135to150,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE3_135to150,DE4,input,balance,yes,,x
+DE4_id_trade_to_self_135to150,DE4,input,balance,yes,,x
+DE4_id_balance_120to135,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE1_120to135,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE2_120to135,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE3_120to135,DE4,input,balance,yes,,x
+DE4_id_trade_to_self_120to135,DE4,input,balance,yes,,x
+DE4_id_balance_105to120,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE1_105to120,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE2_105to120,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE3_105to120,DE4,input,balance,yes,,x
+DE4_id_trade_to_self_105to120,DE4,input,balance,yes,,x
+DE4_id_balance_90to105,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE1_90to105,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE2_90to105,DE4,input,balance,yes,,x
+DE4_id_balance_to_DE3_90to105,DE4,input,balance,yes,,x
+DE4_id_trade_to_self_90to105,DE4,input,balance,yes,,x
+DE4_id_balance_75to90,DE4,input,balance,pending,,x
+DE4_id_balance_to_DE1_75to90,DE4,input,balance,pending,,x
+DE4_id_balance_to_DE2_75to90,DE4,input,balance,pending,,x
+DE4_id_balance_to_DE3_75to90,DE4,input,balance,pending,,x
+DE4_id_trade_to_self_75to90,DE4,input,balance,pending,,x
+DE4_id_balance_60to75,DE4,input,balance,pending,,x
+DE4_id_balance_to_DE1_60to75,DE4,input,balance,pending,,x
+DE4_id_balance_to_DE2_60to75,DE4,input,balance,pending,,x
+DE4_id_balance_to_DE3_60to75,DE4,input,balance,pending,,x
+DE4_id_trade_to_self_60to75,DE4,input,balance,pending,,x
+DE4_id_balance_45to60,DE4,input,balance,only past products,,x
+DE4_id_balance_to_DE1_45to60,DE4,input,balance,only past products,,x
+DE4_id_balance_to_DE2_45to60,DE4,input,balance,only past products,,x
+DE4_id_balance_to_DE3_45to60,DE4,input,balance,only past products,,x
+DE4_id_trade_to_self_45to60,DE4,input,balance,only past products,,x
+DE4_id_balance_30to45,DE4,input,balance,only past products,,x
+DE4_id_balance_to_DE1_30to45,DE4,input,balance,only past products,,x
+DE4_id_balance_to_DE2_30to45,DE4,input,balance,only past products,,x
+DE4_id_balance_to_DE3_30to45,DE4,input,balance,only past products,,x
+DE4_id_trade_to_self_30to45,DE4,input,balance,only past products,,x
+DE4_id_trade_to_self_15to30,DE4,input,balance,only past products,,x
+DE4_id_trade_to_self_0to15,DE4,input,balance,only past products,,x
+DE4_id_trade_to_self_0to30,DE4,input,balance,no,,x
+DE_load_actual,all,input,fundamental,yes,x,x
+DE_load_forecast,all,input,fundamental,yes,,x
+DE_load_diff,all,input,fundamental,yes,x,x
+DE_solar_actual,all,input,fundamental,yes,x,x
+DE_solar_forecast,all,input,fundamental,yes,,x
+DE_solar_diff,all,input,fundamental,yes,x,x
+DE_wind_onshore_actual,all,input,fundamental,yes,x,x
+DE_wind_onshore_forecast,all,input,fundamental,yes,,x
+DE_wind_onshore_diff,all,input,fundamental,yes,x,x
+DE_wind_offshore_actual,all,input,fundamental,yes,x,x
+DE_wind_offshore_forecast,all,input,fundamental,yes,,x
+DE_wind_offshore_diff,all,input,fundamental,yes,x,x
+DE4_load_actual,DE4,input,fundamental,yes,x,x
+DE4_load_forecast,DE4,input,fundamental,yes,,x
+DE4_load_diff,DE4,input,fundamental,yes,x,x
+DE4_solar_actual,DE4,input,fundamental,yes,x,x
+DE4_solar_forecast,DE4,input,fundamental,yes,,x
+DE4_solar_diff,DE4,input,fundamental,yes,x,x
+DE4_wind_onshore_actual,DE4,input,fundamental,yes,x,x
+DE4_wind_onshore_forecast,DE4,input,fundamental,yes,,x
+DE4_wind_onshore_diff,DE4,input,fundamental,yes,x,x
+DE4_wind_offshore_actual,DE4,input,fundamental,yes,x,x
+DE4_wind_offshore_forecast,DE4,input,fundamental,yes,,x
+DE4_wind_offshore_diff,DE4,input,fundamental,yes,x,x
+DE2_load_actual,DE2,input,fundamental,yes,x,x
+DE2_load_forecast,DE2,input,fundamental,yes,,x
+DE2_load_diff,DE2,input,fundamental,yes,x,x
+DE2_solar_actual,DE2,input,fundamental,yes,x,x
+DE2_solar_forecast,DE2,input,fundamental,yes,,x
+DE2_solar_diff,DE2,input,fundamental,yes,x,x
+DE2_wind_onshore_actual,DE2,input,fundamental,yes,x,x
+DE2_wind_onshore_forecast,DE2,input,fundamental,yes,,x
+DE2_wind_onshore_diff,DE2,input,fundamental,yes,x,x
+DE2_wind_offshore_actual,DE2,input,fundamental,yes,x,x
+DE2_wind_offshore_forecast,DE2,input,fundamental,yes,,x
+DE2_wind_offshore_diff,DE2,input,fundamental,yes,x,x
+DE3_load_actual,DE3,input,fundamental,yes,x,x
+DE3_load_forecast,DE3,input,fundamental,yes,,x
+DE3_load_diff,DE3,input,fundamental,yes,x,x
+DE3_solar_actual,DE3,input,fundamental,yes,x,x
+DE3_solar_forecast,DE3,input,fundamental,yes,,x
+DE3_solar_diff,DE3,input,fundamental,yes,x,x
+DE3_wind_onshore_actual,DE3,input,fundamental,yes,x,x
+DE3_wind_onshore_forecast,DE3,input,fundamental,yes,,x
+DE3_wind_onshore_diff,DE3,input,fundamental,yes,x,x
+DE3_wind_offshore_actual,DE3,input,fundamental,yes,x,x
+DE3_wind_offshore_forecast,DE3,input,fundamental,yes,,x
+DE3_wind_offshore_diff,DE3,input,fundamental,yes,x,x
+DE1_load_actual,DE1,input,fundamental,yes,x,x
+DE1_load_forecast,DE1,input,fundamental,yes,,x
+DE1_load_diff,DE1,input,fundamental,yes,x,x
+DE1_solar_actual,DE1,input,fundamental,yes,x,x
+DE1_solar_forecast,DE1,input,fundamental,yes,,x
+DE1_solar_diff,DE1,input,fundamental,yes,x,x
+DE1_wind_onshore_actual,DE1,input,fundamental,yes,x,x
+DE1_wind_onshore_forecast,DE1,input,fundamental,yes,,x
+DE1_wind_onshore_diff,DE1,input,fundamental,yes,x,x
+DE1_wind_offshore_actual,DE1,input,fundamental,yes,x,x
+DE1_wind_offshore_forecast,DE1,input,fundamental,yes,,x
+DE1_wind_offshore_diff,DE1,input,fundamental,yes,x,x
+VWAP_90to105_lag_24h,all,input,price_lag,yes,,x
+VWAP_90to105_lag_48h,all,input,price_lag,yes,,x
+VWAP_90to105_lag_168h,all,input,price_lag,yes,,x
+Dayahead_Auction_hourly_lag_24h,all,input,price_lag,yes,,x
+Dayahead_Auction_hourly_lag_48h,all,input,price_lag,yes,,x
+Dayahead_Auction_hourly_lag_168h,all,input,price_lag,yes,,x
+intraday_auction_price_lag_24h,all,input,price_lag,yes,,x
+intraday_auction_price_lag_48h,all,input,price_lag,yes,,x
+intraday_auction_price_lag_168h,all,input,price_lag,yes,,x

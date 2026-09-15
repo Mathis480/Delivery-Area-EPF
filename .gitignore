@@ -59,7 +59,10 @@ Thumbs.db
 # WHITELIST: ONLY CODE, REPOSITORY DOCUMENTATION, AND STRUCTURE KEEPERS ALLOWED
 # ==============================================================================
 !*.py
+!*.ipynb
 !README.md
 !.gitkeep
 !.gitignore
 !AGENTS.md
+!features.csv
+!features.yaml
