@@ -845,6 +845,8 @@ DE_wind_onshore_diff,all,input,fundamental,yes,x,x
 DE_wind_offshore_actual,all,input,fundamental,yes,x,x
 DE_wind_offshore_forecast,all,input,fundamental,yes,,x
 DE_wind_offshore_diff,all,input,fundamental,yes,x,x
+DE_cross_border_trading,all,input,fundamental,yes,x,x
+cross_border_trading,all,input,fundamental,yes,x,x
 DE4_load_actual,DE4,input,fundamental,yes,x,x
 DE4_load_forecast,DE4,input,fundamental,yes,,x
 DE4_load_diff,DE4,input,fundamental,yes,x,x

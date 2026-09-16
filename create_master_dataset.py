@@ -171,6 +171,24 @@ def load_fundamentals(base_dir: str) -> pd.DataFrame:
             combined_reg = pd.concat(reg_dfs, ignore_index=True).sort_values("Date").drop_duplicates(subset=["Date"])
             all_cat_dfs.append(combined_reg)
 
+    # Load Cross-Border Flows (Germany)
+    cb_dir = os.path.join(fund_dir, "CROSS_BORDER")
+    if os.path.isdir(cb_dir):
+        cb_files = sorted(glob.glob(os.path.join(cb_dir, "*.csv")))
+        cb_dfs = []
+        for f in cb_files:
+            df = pd.read_csv(f, skiprows=[1])
+            date_col = [c for c in df.columns if "Date" in c][0]
+            df["Date"] = pd.to_datetime(df[date_col], utc=True)
+            val_col = [c for c in df.columns if c not in ["Date", date_col]][0]
+            cb_dfs.append(pd.DataFrame({
+                "Date": df["Date"],
+                "DE_cross_border_trading": pd.to_numeric(df[val_col], errors="coerce")
+            }))
+        if cb_dfs:
+            combined_cb = pd.concat(cb_dfs, ignore_index=True).sort_values("Date").drop_duplicates(subset=["Date"])
+            all_cat_dfs.append(combined_cb)
+
     if not all_cat_dfs:
         return pd.DataFrame(columns=["Date"])
 
@@ -189,6 +207,8 @@ def load_fundamentals(base_dir: str) -> pd.DataFrame:
         result["prediction_error_onshore"] = result["DE_wind_onshore_diff"]
     if "DE_wind_offshore_diff" in result.columns:
         result["prediction_error_offshore"] = result["DE_wind_offshore_diff"]
+    if "DE_cross_border_trading" in result.columns:
+        result["cross_border_trading"] = result["DE_cross_border_trading"]
 
     print(f"[3/8] Loaded Fundamentals: {len(result.columns) - 1} fundamental generation & demand features.")
     return result

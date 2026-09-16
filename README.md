@@ -23,9 +23,17 @@ The repository builds the canonical training dataset ([`Data/master_dataset_2021
 | **Day-Ahead Spot** | `Data/DA Auction Spot Prices/` | EPEX Day-Ahead hourly auction prices cleared at 12:00 D-1, mapped continuously to 15-minute UTC intervals. |
 | **Intraday Spot** | `Data/ID Auction Spot Prices/` | EPEX Intraday 15-minute auction spot prices cleared at 15:00 D-1 (seamlessly combining 15-Call and Pan-European IDA1). |
 | **Balancing Energy** | `Data/Balancing Energy/` | Operational activated balancing reserves (SRL / aFRR and MRL / mFRR, positive and negative) mapped to TSO zones. |
-| **Fundamentals** | `Data/Fundamentals/` | Energy-Charts generation and demand fundamentals across 4 categories: `LOAD`, `SOLAR`, `ONSHORE`, `OFFSHORE` (actuals, Day-Ahead forecasts, and forecast errors). |
+| **Fundamentals** | `Data/Fundamentals/` | Energy-Charts generation, demand, and cross-border fundamentals across 5 categories: `LOAD`, `SOLAR`, `ONSHORE`, `OFFSHORE`, and `CROSS_BORDER` (actuals, Day-Ahead forecasts, forecast errors, and net cross-border commercial trading flows). |
 | **Calendar Dummies** | *Generated in-pipeline* | Granular wall-clock delivery indicators: `Weekday_1..7`, `Hour_0..23`, and `Quarter_1..4` (Europe/Berlin). |
 | **Multi-Day Lags** | *Generated in-pipeline* | Historical multi-day shifts: `lag_24h` (96 steps), `lag_48h` (192 steps), and `lag_168h` (672 steps) for key price benchmarks. |
+
+### Energy-Charts Cross-Border Electricity Trading Links
+
+The cross-border commercial trading data (*Grenzüberschreitender Stromhandel*, net power flows in MW, 15-minute resolution, Pure UTC) is retrieved directly from the Fraunhofer ISE Energy-Charts spot market feed:
+* **2021:** [Energy-Charts Spot Market DE (2021 UTC)](https://www.energy-charts.info/charts/price_spot_market/chart.htm?l=en&c=DE&legendItems=iy1&year=2021&interval=year&timezone=utc)
+* **2022:** [Energy-Charts Spot Market DE (2022 UTC)](https://www.energy-charts.info/charts/price_spot_market/chart.htm?l=en&c=DE&legendItems=iy1&year=2022&interval=year&timezone=utc)
+* **2023:** [Energy-Charts Spot Market DE (2023 UTC)](https://www.energy-charts.info/charts/price_spot_market/chart.htm?l=en&c=DE&legendItems=iy1&year=2023&interval=year&timezone=utc)
+* **2024:** [Energy-Charts Spot Market DE (2024 UTC)](https://www.energy-charts.info/charts/price_spot_market/chart.htm?l=en&c=DE&legendItems=iy1&year=2024&interval=year&timezone=utc)
 
 ---
 

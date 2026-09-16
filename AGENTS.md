@@ -24,9 +24,10 @@ A core risk is Look-Ahead Bias (data leakage). In this project:
     * Historical continuous trading windows that closed strictly prior to the cutoff (e.g., `VWAP_90to105` and older windows).
   * **Ex-Post / Realized Features (Leakage Hazard if Unlagged):**
     * Actual generation and demand (`load_actual`, `solar_actual`, `wind_onshore_actual`, `wind_offshore_actual`).
+    * Realized cross-border flows (`DE_cross_border_trading` / `cross_border_trading`).
     * Realized forecast errors (`load_diff`, `solar_diff`, `wind_diff`).
     * Activated balancing reserves (`SRL_positive/negative`, `MRL_positive/negative`).
-    * *Notice:* At decision time ($t_{\text{delivery}} - 60\text{m}$ to $90\text{m}$), the actual generation or balancing activation for the delivery interval $t_{\text{delivery}}$ has **not physically occurred yet**. Using unshifted actuals for interval $t_{\text{delivery}}$ creates catastrophic look-ahead leakage.
+    * *Notice:* At decision time ($t_{\text{delivery}} - 60\text{m}$ to $90\text{m}$), the actual generation, cross-border flow, or balancing activation for the delivery interval $t_{\text{delivery}}$ has **not physically occurred yet**. Using unshifted actuals for interval $t_{\text{delivery}}$ creates catastrophic look-ahead leakage.
 
 ### 2.3 Two-Stage Data Architecture (Data Prep vs. Modeling Hand-Off)
 To maintain a clean separation of concerns and scientific traceability:
@@ -34,7 +35,7 @@ To maintain a clean separation of concerns and scientific traceability:
    * The master dataset (`master_dataset_2021_2024.csv`) aligns all variables systematically by their **delivery start timestamp** (`Date` = $t_{\text{delivery}}$).
    * **Rule:** No artificial feature lag shifts are baked into the master file creation stage. The master dataset serves as the pristine, canonical ground-truth repository.
 2. **Stage 2 – Downstream Feature Engineering & Model Training:**
-   * **Mandatory Shift Application:** In downstream modeling pipelines, all realized/actual features flagged in `features.csv` (under `shift_needed_2h = "x"`, covering actual demand, solar/wind generation, and balancing reserve activations) must be shifted backwards by at least **8 quarter-hours (120 minutes / 2.0 hours)** prior to delivery Start.
+   * **Mandatory Shift Application:** In downstream modeling pipelines, all realized/actual features flagged in `features.csv` (under `shift_needed_2h = "x"`, covering actual demand, solar/wind generation, cross-border trading flows, and balancing reserve activations) must be shifted backwards by at least **8 quarter-hours (120 minutes / 2.0 hours)** prior to delivery Start.
 
 ### 2.4 Canonical Target Variables
 The canonical forecasting targets represent the volume-weighted average continuous price in the final 30 minutes prior to delivery (`0to30`):

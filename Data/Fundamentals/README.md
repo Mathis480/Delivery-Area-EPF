@@ -29,6 +29,7 @@ The 72 CSV files are organized into four dedicated domain subdirectories:
 * `ONSHORE/` (20 files): Wind Onshore actual infeed and Day-Ahead forecasts (2021–2024).
 * `OFFSHORE/` (12 files): Wind Offshore actual infeed and Day-Ahead forecasts for Germany, 50Hertz, and TenneT (2021–2024; TransnetBW and Amprion have no offshore transmission grid connections).
 * `SOLAR/` (20 files): Solar PV actual infeed and Day-Ahead forecasts (2021–2024).
+* `CROSS_BORDER/` (4 CSV + 4 raw JSON files): Cross-border commercial trading flows (*Grenzüberschreitender Stromhandel*) in 15-minute resolution (MW) for Germany (2021–2024).
 
 ### LOAD (Total Load)
 
@@ -124,4 +125,14 @@ The 72 CSV files are organized into four dedicated domain subdirectories:
 | `energy-charts_SOLAR_Forecasts_and_actual_values_in_the_control_area_of_TransnetBW_in_2022.csv` | TransnetBW (TSO Zone DE1) | 2022 | [Energy-Charts (2022)](https://www.energy-charts.info/charts/power_forecast/chart.htm?l=en&c=DE&interval=year&year=2022&dataType=TransnetBW-solar&timezone=utc) |
 | `energy-charts_SOLAR_Forecasts_and_actual_values_in_the_control_area_of_TransnetBW_in_2023.csv` | TransnetBW (TSO Zone DE1) | 2023 | [Energy-Charts (2023)](https://www.energy-charts.info/charts/power_forecast/chart.htm?l=en&c=DE&interval=year&year=2023&dataType=TransnetBW-solar&timezone=utc) |
 | `energy-charts_SOLAR_Forecasts_and_actual_values_in_the_control_area_of_TransnetBW_in_2024.csv` | TransnetBW (TSO Zone DE1) | 2024 | [Energy-Charts (2024)](https://www.energy-charts.info/charts/power_forecast/chart.htm?l=en&c=DE&interval=year&year=2024&dataType=TransnetBW-solar&timezone=utc) |
+ 
+ 
+### CROSS_BORDER (Cross-Border Electricity Trading)
+ 
+| Filename | Market / TSO Area | Year | Interactive Chart Link |
+| :--- | :--- | :---: | :--- |
+| `energy-charts_CROSS_BORDER_in_Germany_in_2021.csv` | Germany (National Total) | 2021 | [Energy-Charts Spot Market (2021)](https://www.energy-charts.info/charts/price_spot_market/chart.htm?l=en&c=DE&legendItems=iy1&year=2021&interval=year&timezone=utc) |
+| `energy-charts_CROSS_BORDER_in_Germany_in_2022.csv` | Germany (National Total) | 2022 | [Energy-Charts Spot Market (2022)](https://www.energy-charts.info/charts/price_spot_market/chart.htm?l=en&c=DE&legendItems=iy1&year=2022&interval=year&timezone=utc) |
+| `energy-charts_CROSS_BORDER_in_Germany_in_2023.csv` | Germany (National Total) | 2023 | [Energy-Charts Spot Market (2023)](https://www.energy-charts.info/charts/price_spot_market/chart.htm?l=en&c=DE&legendItems=iy1&year=2023&interval=year&timezone=utc) |
+| `energy-charts_CROSS_BORDER_in_Germany_in_2024.csv` | Germany (National Total) | 2024 | [Energy-Charts Spot Market (2024)](https://www.energy-charts.info/charts/price_spot_market/chart.htm?l=en&c=DE&legendItems=iy1&year=2024&interval=year&timezone=utc) |
 
