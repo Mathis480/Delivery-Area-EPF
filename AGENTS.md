@@ -1,73 +1,57 @@
 # Agent Instructions & Workspace Rules
 
 ## 1. Language Policy
+* **User Chat:** Match user's language (German/English).
+* **Code & Artifacts:** Strictly English (code, documentation, comments, commit messages).
 
-* **Direct Chat Communication with the User:** You may converse with the user in German (or match the language chosen by the user).
-* **Project Documentation & Artifacts (Mandatory English):** All project documentation, README files, markdown reports, summaries, notes, and repository artifacts must be authored **exclusively in English**.
-* **Code & Technical Nomenclature (Mandatory English):** All code, identifiers, function and variable names, classes, docstrings, comments, and commit messages must be strictly in English.
+## 2. Core Methodological Rules
 
-## 2. Methodology & Scientific Rigor
+### 2.1 Time Series Grid & UTC Base
+* All data must use strictly **Pure UTC (`+00:00` / `Z`)**.
+* Master index `Date` represents delivery start time ($t_{\text{delivery}}$).
+* Continuous 15-minute grid must remain complete and unbroken across the entire dataset. Never drop rows.
 
-### 2.1 Pure UTC Time Base
-* All time series data across all sources must be strictly formatted, indexed, and merged in **Pure UTC** (`+00:00` / `Z`).
-* The master index column `Date` uniquely defines the **delivery start time** ($t_{\text{delivery}}$) of the contract product.
+### 2.2 Targets & Benchmark
+* **Regional Forecasting Targets:** `DE1_VWAP_0to30`, `DE2_VWAP_0to30`, `DE3_VWAP_0to30`, `DE4_VWAP_0to30`.
+* **Naive Benchmark:** `{zone}_VWAP_90to105` (last fully observed and reported window at the effective 90-minute pre-delivery cutoff).
+* **National `VWAP_0to30` Rule:** Strictly an internal technical imputation fallback for zero-trade regional intervals. Never use it as a target, feature, or benchmark.
 
-### 2.2 Look-Ahead Bias Prevention & Lead-Time Cutoff Policy
-A core risk is Look-Ahead Bias (data leakage). In this project:
-* **Prediction Point vs. Delivery Interval:** Predictions for a given contract maturity starting at $t_{\text{delivery}}$ are made at a defined decision point prior to delivery (**60 minutes before delivery**, where the last fully observed continuous trading window is `VWAP_90to105`).
-* **Ex-Ante vs. Ex-Post Features:**
-  * **Ex-Ante Features (Known at Prediction Time):**
-    * Day-Ahead auction prices (`Dayahead_Auction_hourly`, cleared at D-1 12:00 CET).
-    * Intraday auction prices (`Intraday Auction Price`, cleared at D-1 15:00 CET).
-    * Day-Ahead fundamental forecasts (`load_forecast`, `solar_forecast`, `wind_onshore_forecast`, `wind_offshore_forecast`, published at D-1 12:00).
-    * Calendar and delivery time dummies (`Weekday_1` to `Weekday_7`, `Hour_0` to `Hour_23`, and `Quarter_1` to `Quarter_4` based on Europe/Berlin local time).
-    * Historical continuous trading windows that closed strictly prior to the cutoff (e.g., `VWAP_90to105` and older windows).
-  * **Ex-Post / Realized Features (Leakage Hazard if Unlagged):**
-    * Actual generation and demand (`load_actual`, `solar_actual`, `wind_onshore_actual`, `wind_offshore_actual`).
-    * Realized cross-border flows (`DE_cross_border_trading` / `cross_border_trading`).
-    * Realized forecast errors (`load_diff`, `solar_diff`, `wind_diff`).
-    * Activated balancing reserves (`SRL_positive/negative`, `MRL_positive/negative`).
-    * *Notice:* At decision time ($t_{\text{delivery}} - 60\text{m}$ to $90\text{m}$), the actual generation, cross-border flow, or balancing activation for the delivery interval $t_{\text{delivery}}$ has **not physically occurred yet**. Using unshifted actuals for interval $t_{\text{delivery}}$ creates catastrophic look-ahead leakage.
+### 2.3 Look-Ahead Bias, Reporting Delay & Feature Shifting
+* **Prediction Cutoff & Reporting Delay:**
+  * Nominal trading cutoff is **60 minutes before delivery** ($t_{\text{delivery}} - 60\text{ min}$).
+  * An operational publication and processing delay of **30 minutes** (2 QH) is enforced to ensure all transaction indices are strictly ex-ante (rounding up Puć et al.'s 20-minute buffer to the 15-minute grid granularity).
+  * Consequently, the **effective information availability cutoff** is **90 minutes before delivery** ($t \le t_{\text{delivery}} - 90\text{ min}$).
+  * For target contract $T$ ($k = 0$), the last valid, non-leaking window is `{zone}_VWAP_90to105`.
+* **Neighboring Contract Temporal Availability Rule:**
+  * For neighbor contract $k \in [-4, +2]$ delivered at $t_{\text{delivery}}(T) + k \cdot 15\text{ min}$, a VWAP window ending $A$ minutes before its delivery is available without look-ahead bias if and only if:
+    $$A \ge 90 + 15 \cdot k$$
+  * Safe windows: $k=-4 \to \text{30to45}$; $k=-3 \to \text{45to60}$; $k=-2 \to \text{60to75}$; $k=-1 \to \text{75to90}$; $k=0 \to \text{90to105}$; $k=+1 \to \text{105to120}$; $k=+2 \to \text{120to135}$.
+* **Ex-Post Features (Fundamentals & Reserves):**
+  * All realized/ex-post features (actual generation, demand, cross-border flows, balancing activations flagged with `shift_needed_2h = "x"` in `features.csv`) must be lagged by at least **8 quarter-hours (120 minutes / 2 hours)** prior to delivery.
+* **No Backward Fill:** `bfill` is strictly prohibited.
 
-### 2.3 Two-Stage Data Architecture (Data Prep vs. Modeling Hand-Off)
-To maintain a clean separation of concerns and scientific traceability:
-1. **Stage 1 – Master Data Preparation (`create_master_dataset`):**
-   * The master dataset (`master_dataset_2021_2024.csv`) aligns all variables systematically by their **delivery start timestamp** (`Date` = $t_{\text{delivery}}$).
-   * **Rule:** No artificial feature lag shifts are baked into the master file creation stage. The master dataset serves as the pristine, canonical ground-truth repository.
-2. **Stage 2 – Downstream Feature Engineering & Model Training:**
-   * **Mandatory Shift Application:** In downstream modeling pipelines, all realized/actual features flagged in `features.csv` (under `shift_needed_2h = "x"`, covering actual demand, solar/wind generation, cross-border trading flows, and balancing reserve activations) must be shifted backwards by at least **8 quarter-hours (120 minutes / 2.0 hours)** prior to delivery Start.
+## 3. TSO Delivery Area Mapping
+Always map German TSOs 1:1 to official EPEX delivery area prefixes:
+* `DE1_`: TransnetBW (`DE-ENBW`)
+* `DE2_`: Amprion (`DE-AMP`)
+* `DE3_`: TenneT (`DE-TPS`)
+* `DE4_`: 50Hertz (`DE-50HZ`)
+* `DE_`: National aggregate
 
-### 2.4 Canonical Target Variables
-The canonical forecasting targets represent the volume-weighted average continuous price in the final 30 minutes prior to delivery (`0to30`):
-* **Regional Delivery Targets:** `DE1_VWAP_0to30`, `DE2_VWAP_0to30`, `DE3_VWAP_0to30`, `DE4_VWAP_0to30`.
-* **National Benchmark Target:** `VWAP_0to30`.
+Never use raw company names in code, features, or model configs.
 
-## 3. German TSO Control Zones & Delivery Area Mapping
+## 4. Missing Data & Imputation Protocol
+* **Regional Price Windows (`DEx_VWAP_{w}`):**
+  1. Own observed regional VWAP in window $w$.
+  2. Fallback: National aggregate in the same window (`VWAP_{w}`).
+* **National Price Windows (`VWAP_{w}`):**
+  1. Window `345to360`: Fallback to `Intraday Auction Price` (or `Dayahead_Auction_hourly`).
+  2. Subsequent windows: Horizontal forward-fill from preceding window within the same contract maturity.
+  3. Window `0to30`: Fallback to `VWAP_0to15` / `VWAP_15to30`.
+* **Volumes, Trade Counts, Net Flows:** Fill missing values strictly with `0.0`.
 
-To maintain strict cross-dataset consistency across EPEX continuous transactions, balancing reserves (SRL / aFRR, MRL / mFRR), and fundamentals (demand, solar, wind generation), the four German Transmission System Operators (TSOs) must always be mapped 1:1 to their official EPEX delivery area codes:
-
-| Delivery Area Code | TSO / Control Area | EPEX Code | Zonal Prefix |
-| :--- | :--- | :--- | :--- |
-| **`DE1`** | **TransnetBW** | `DE-ENBW` | `DE1_` |
-| **`DE2`** | **Amprion** | `DE-AMP` | `DE2_` |
-| **`DE3`** | **TenneT** | `DE-TPS` | `DE3_` |
-| **`DE4`** | **50Hertz** | `DE-50HZ` | `DE4_` |
-| **`DE`** | **National Aggregate (Germany)** | `DE` | `DE_` (or unprefixed for national indices) |
-
-* **Mandatory Rule:** All regional features across all domains must be prefixed with `DE1_`, `DE2_`, `DE3_`, or `DE4_` (e.g., `DE1_load_actual`, `DE1_SRL_positive`, `DE1_VWAP_0to30`). Raw company names (e.g., `TransnetBW`, `Amprion`) must never be used in feature names or ML model selectors.
-
-## 4. Missing Data & NaN Imputation Principles
-
-* **Strict No-Deletion Rule:** When encountering missing values (`NaN`), rows or delivery intervals must **NEVER** be deleted or dropped. The continuous time series grid must remain unbroken and complete across the entire evaluation horizon.
-* **Hierarchical Price Imputation Protocol (Variante B):**
-  * **National Benchmark Trajectory (`VWAP_{w}`):**
-    1. Leftmost window (`VWAP_345to360`): Fallback to contemporaneous `Intraday Auction Price` (and `Dayahead_Auction_hourly` as backup).
-    2. Subsequent windows (`330to345` to `0to15`): Horizontal forward-fill from preceding window within the same contract maturity.
-    3. Target window (`VWAP_0to30`): Fallback to `VWAP_0to15` / `VWAP_15to30`.
-  * **Regional Zonal Trajectories (`DEx_VWAP_{w}`):**
-    * Prio 0: Own observed regional VWAP in window $w$.
-    * Prio 1: Contemporaneous national volume-weighted price in the **same window $w$** (`VWAP_{w}`).
-  * **Non-Price Continuous Features (Volume, Trades, Balances):** Unobserved trading activity is filled strictly with `0.0`.
-* **Multi-Day Lag Initialization Buffer:** Time grids must be initialized with at least a 7-day (672 steps) historical buffer before the canonical start date (`2021-09-30 22:00 UTC`), ensuring zero initial NaNs in multi-day lag features (`lag_24h`, `lag_48h`, `lag_168h`).
-* **Ban on Look-Ahead Filling:** `bfill` (backward fill) is strictly forbidden across all feature engineering pipelines.
+## 5. Experimental Setup & Backtesting Protocol
+* **Historical Lookback:** Fixed rolling window of **822 days** (~2.25 years, covering full Q4 2021 through 2023 history prior to 2024 test start).
+* **Validation Window:** Last **30 days** prior to test date ($T-30$ to $T-1$) for hyperparameter tuning and model adaptation.
+* **Test Horizon:** Calendar year **2024** (`2024-01-01` to `2024-12-31`), evaluated out-of-sample across all 96 QH/day.
 
