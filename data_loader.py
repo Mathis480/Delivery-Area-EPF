@@ -25,6 +25,11 @@ from config import (
     MASTER_PARQUET,
     N_QH,
     NEIGHBOR_SAFE_VWAP_WINDOWS,
+    FEATURE_SET_ALL,
+    FEATURE_SET_MACRO,
+    FEATURE_SET_NEIGHBOR,
+    FEATURE_SET_FUNDAMENTAL,
+    FEATURE_SET_BALANCE,
     SCALERS_DIR,
     SCENARIO,
     SHIFT_QH,
@@ -37,12 +42,12 @@ from config import (
 def load_feature_catalogue(
     features_csv: str = FEATURES_CSV, scenario: str = SCENARIO
 ) -> tuple[dict[str, list[str]], list[str]]:
-    """
-    Parse features.csv to retrieve:
-      1. Zone-isolated active feature lists: mapping zone ('DE1'..'DE4') -> active feature names
-         combining national ('all') features and zone-specific ('DEx') features.
-      2. All ex-post/realized columns across all zones requiring 2h backward shift (Rule 2.2 / 2.3).
-    """
+
+    """Parse features.csv to retrieve:
+      - zone-specific active feature lists ('DE1'..'DE4') -> active feature names
+        combining national ('all') features and zone-specific ('DEx') features.
+      - All ex-post/realized columns across all zones requiring 2h backward shift.""" 
+
     feat = pd.read_csv(features_csv)
     mask_keep = feat["keep"].astype(str).str.strip().str.lower() == "yes"
     mask_sc = feat[scenario].astype(str).str.strip().str.lower() == "x"
@@ -73,8 +78,15 @@ class WindowData:
     y_test: float
     benchmark_eur: float
     scaler_X: StandardScaler
+    y_mean: float = 0.0              # Mean of y_diff on training set (for inverse transform)
+    y_std: float = 1.0               # Std of y_diff on training set (for inverse transform)
     dates_train: pd.DatetimeIndex = field(default_factory=pd.DatetimeIndex)
     dates_val: pd.DatetimeIndex = field(default_factory=pd.DatetimeIndex)
+    col_mask: Optional[np.ndarray] = None
+    X_train_full: Optional[np.ndarray] = None
+    X_val_full: Optional[np.ndarray] = None
+    X_test_full: Optional[np.ndarray] = None
+    bm_trainval: Optional[np.ndarray] = None
 
     def save_scaler(self, zone: str, qh_idx: int, date_str: str, folder: str = SCALERS_DIR) -> str:
         """Persist fitted StandardScaler to Models/scalers/."""
@@ -87,13 +99,11 @@ class WindowData:
 
 # Main Loader
 class QHDataLoader:
-    """
-    In-memory data provider for rolling QH.
-
+    """In-memory data provider for rolling QH.
     Pipeline:
       1. Loads master_dataset.parquet and parses features.csv for active zone features.
       2. Shifts ex-post features (actuals, flows, reserves) by 8 QH (2h) backwards.
-      3. Maps UTC timestamps to German delivery days and quarter-hour indices (qh_idx 0..95).
+      3. Maps UTC timestamps to quarter-hour indices (qh_idx 0..95).
       4. Splits data into 96 separate tables (one per QH position) for rolling slicing.
       5. Provides get_window() to extract scaled train/val/test arrays and differenced targets.
     """
@@ -133,18 +143,77 @@ class QHDataLoader:
         # Build leakage-safe neighbor VWAP price trajectories on continuous 15-minute grid
         # Leakage-safe rule: window AtoB ending A min before neighbor delivery requires A >= 90 + 15*k
         nb_series = {}
+
+        # 1. National neighbor series
+        for k, win in NEIGHBOR_SAFE_VWAP_WINDOWS.items():
+            nat_src = f"VWAP_{win}"
+            nat_nb = f"DE_nb_k{k:+d}_VWAP_{win}"
+            if nat_src in df.columns:
+                nb_series[nat_nb] = df[nat_src].shift(-k).ffill().bfill()
+
+        # 2. Regional neighbor series, spreads, volumes, trades
+        self._neighbor_features: dict[str, list[str]] = {z: [] for z in ZONES}
         for zone in ZONES:
+            bench_col = f"{zone}_VWAP_90to105"
             for k, win in NEIGHBOR_SAFE_VWAP_WINDOWS.items():
-                src_col = f"{zone}_VWAP_{win}"
-                nb_col = f"{zone}_nb_k{k:+d}_VWAP_{win}"
-                if src_col in df.columns:
-                    # Row i gets value of neighbor k (row i + k) -> shift(-k)
-                    nb_series[nb_col] = df[src_col].shift(-k).ffill()
-                    if zone in self._zone_features and nb_col not in self._zone_features[zone]:
-                        self._zone_features[zone].append(nb_col)
+                reg_src = f"{zone}_VWAP_{win}"
+                reg_nb = f"{zone}_nb_k{k:+d}_VWAP_{win}"
+                nat_nb = f"DE_nb_k{k:+d}_VWAP_{win}"
+
+                if reg_src in df.columns:
+                    nb_val = df[reg_src].shift(-k).ffill().bfill()
+                    nb_series[reg_nb] = nb_val
+                    self._neighbor_features[zone].append(reg_nb)
+
+                    # Spread relative to target naive benchmark: (P_k - P_target_naive)
+                    spread_col = f"{zone}_nb_k{k:+d}_spread"
+                    nb_series[spread_col] = nb_val - df[bench_col]
+                    self._neighbor_features[zone].append(spread_col)
+
+                    # Cross-zone spread vs national: (P_k_zone - P_k_national)
+                    if nat_nb in nb_series:
+                        cross_col = f"{zone}_vs_DE_nb_k{k:+d}"
+                        nb_series[cross_col] = nb_val - nb_series[nat_nb]
+                        self._neighbor_features[zone].append(cross_col)
+
+                # Volumes and trades for neighbor windows
+                vol_src = f"{zone}_VWAP_total_volume_{win}"
+                if vol_src in df.columns:
+                    vol_col = f"{zone}_nb_k{k:+d}_vol"
+                    nb_series[vol_col] = df[vol_src].shift(-k).fillna(0.0)
+                    self._neighbor_features[zone].append(vol_col)
+
+                trades_src = f"{zone}_VWAP_total_trades_{win}"
+                if trades_src in df.columns:
+                    trades_col = f"{zone}_nb_k{k:+d}_trades"
+                    nb_series[trades_col] = df[trades_src].shift(-k).fillna(0.0)
+                    self._neighbor_features[zone].append(trades_col)
+
+            # Ensure all neighbor features are registered in _zone_features for FEATURE_SET_ALL
+            if zone in self._zone_features:
+                for c in self._neighbor_features[zone]:
+                    if c not in self._zone_features[zone]:
+                        self._zone_features[zone].append(c)
 
         if nb_series:
             df = pd.concat([df, pd.DataFrame(nb_series, index=df.index)], axis=1)
+
+        # 3. Zone Balances & Cross-Border Intraday Trading Positions (Set 4)
+        safe_bal_windows = (
+            "345to360", "330to345", "315to330", "300to315", "285to300", "270to285",
+            "255to270", "240to255", "225to240", "210to225", "195to210", "180to195",
+            "165to180", "150to165", "135to150", "120to135", "105to120", "90to105",
+        )
+        self._balance_features: dict[str, list[str]] = {z: [] for z in ZONES}
+        for zone in ZONES:
+            for col in df.columns:
+                if col.startswith(zone) and ("_id_balance" in col or "_id_trade_to_self" in col):
+                    if any(col.endswith(f"_{w}") for w in safe_bal_windows):
+                        self._balance_features[zone].append(col)
+                        # Also register in _zone_features for FEATURE_SET_ALL
+                        if zone in self._zone_features and col not in self._zone_features[zone]:
+                            self._zone_features[zone].append(col)
+
 
         # Map to delivery day and QH index (0..95) — PURE UTC, no timezone conversion
         # Rule 2.1: All data uses strictly Pure UTC. No tz_convert to Europe/Berlin.
@@ -176,10 +245,13 @@ class QHDataLoader:
         zone: str,
         qh_idx: int,
         test_date: str | pd.Timestamp,
+        feature_set: str = FEATURE_SET_ALL,
         lookback_days: int = LOOKBACK_DAYS,
         val_days: int = VAL_DAYS,
         save_scaler: bool = False,
         filter_zero_var: bool = True,
+        filter_corr: bool = False,
+        corr_threshold: float = 0.80,
     ) -> Optional[WindowData]:
         """
         Returns scaled train, validation, and test arrays for a given (zone, qh_idx, test_date).
@@ -187,13 +259,17 @@ class QHDataLoader:
         StandardScaler is fitted strictly on X_train.
 
         Args:
+            feature_set: Feature subset to use ('all', 'set1_macro', 'set2_neighbor', 'set3_fundamental').
             filter_zero_var: If True, removes columns with zero variance in the training
-                set (e.g. Hour/Quarter dummies constant within a QH, nighttime solar).
+                set (e.g. constant dummies within a QH, nighttime solar).
                 Set to False for MAML which requires fixed input dimensions across QH.
+            filter_corr: If True, applies Puc et al. correlation filter (|r| >= corr_threshold)
+                strictly on X_train to remove redundant collinear regressors.
+            corr_threshold: Correlation cutoff threshold (default 0.80 matching Puć et al.).
         """
         target_col = TARGET_COL_PATTERN.format(zone=zone)
         benchmark_col = BENCHMARK_COL_PATTERN.format(zone=zone)
-        feature_cols = self.feature_names(zone)
+        feature_cols = self.feature_names(zone, feature_set=feature_set)
 
         qh_df = self._qh_tables[qh_idx]
         dates = self._qh_dates[qh_idx]
@@ -224,36 +300,53 @@ class QHDataLoader:
 
         # Train/Validation temporal split
         n_train = len(history_df) - val_days
-        X_train_raw, y_train = X_raw[:n_train], y_diff[:n_train]
-        X_val_raw, y_val = X_raw[n_train:], y_diff[n_train:]
+        y_train_raw, y_val_raw = y_diff[:n_train], y_diff[n_train:]
+        X_train_raw = X_raw[:n_train]
+        X_val_raw = X_raw[n_train:]
 
-        # Optionally remove zero-variance columns (e.g., Hour/Quarter dummies
-        # constant within a single QH, nighttime solar = 0). The mask is
-        # computed on X_train only to avoid look-ahead bias.
-        # Disabled for MAML which needs a fixed dimension across all 96 QH.
+        # Standardize target: fit ONLY on training set
+        y_mean = float(np.mean(y_train_raw))
+        y_std = float(np.std(y_train_raw))
+        if y_std <= 1e-8:
+            y_std = 1.0
+        y_train = (y_train_raw - y_mean) / y_std
+        y_val = (y_val_raw - y_mean) / y_std
+
+        # Column selection mask (fit strictly on X_train to prevent look-ahead leakage)
+        col_mask = np.ones(X_raw.shape[1], dtype=bool)
+
         if filter_zero_var:
             col_var = np.var(X_train_raw, axis=0)
-            nonzero_mask = col_var > 0
-            X_train_raw = X_train_raw[:, nonzero_mask]
-            X_val_raw = X_val_raw[:, nonzero_mask]
-        else:
-            nonzero_mask = np.ones(X_train_raw.shape[1], dtype=bool)
+            col_mask = col_mask & (col_var > 1e-8)
 
-        # Standardize: fit ONLY on training set
+        if filter_corr and np.sum(col_mask) > 1:
+            X_curr = X_train_raw[:, col_mask]
+            corr = np.corrcoef(X_curr, rowvar=False)
+            corr = np.nan_to_num(corr, nan=0.0)
+            p = np.argwhere(np.triu(np.abs(corr) >= corr_threshold, 1))
+            if len(p) > 0:
+                cols_to_del = np.unique(p[:, 1])
+                curr_indices = np.where(col_mask)[0]
+                col_mask[curr_indices[cols_to_del]] = False
+
+        # Standardize features: fit strictly on full unmasked training set
         scaler = StandardScaler()
-        X_train_scaled = scaler.fit_transform(X_train_raw)
-        X_val_scaled = scaler.transform(X_val_raw)
+        X_train_full = scaler.fit_transform(X_train_raw)
+        X_val_full = scaler.transform(X_val_raw)
+        X_test_raw_full = test_row[feature_cols].values.astype(np.float64).reshape(1, -1)
+        X_test_full = scaler.transform(X_test_raw_full)
+
+        # Apply col_mask to get filtered features for linear/SVR models
+        X_train_scaled = X_train_full[:, col_mask]
+        X_val_scaled = X_val_full[:, col_mask]
         X_trainval = np.vstack([X_train_scaled, X_val_scaled])
         y_trainval = np.concatenate([y_train, y_val])
-
-        # Test observation
-        X_test_raw = test_row[feature_cols].values.astype(np.float64).reshape(1, -1)
-        X_test_raw = X_test_raw[:, nonzero_mask]
-        X_test_scaled = scaler.transform(X_test_raw)
+        X_test_scaled = X_test_full[:, col_mask]
 
         y_test_raw = float(test_row[target_col])
         benchmark_test = float(test_row[benchmark_col])
         y_test_diff = y_test_raw - benchmark_test
+        y_test_scaled = (y_test_diff - y_mean) / y_std
 
         dates_history = pd.DatetimeIndex(history_df["Date"].values)
 
@@ -265,11 +358,18 @@ class QHDataLoader:
             X_trainval=X_trainval,
             y_trainval=y_trainval,
             X_test=X_test_scaled,
-            y_test=y_test_diff,
+            y_test=y_test_scaled,
             benchmark_eur=benchmark_test,
             scaler_X=scaler,
+            y_mean=y_mean,
+            y_std=y_std,
             dates_train=dates_history[:n_train],
             dates_val=dates_history[n_train:],
+            col_mask=col_mask,
+            X_train_full=X_train_full,
+            X_val_full=X_val_full,
+            X_test_full=X_test_full,
+            bm_trainval=bm_raw,
         )
 
         if save_scaler:
@@ -277,20 +377,57 @@ class QHDataLoader:
 
         return window
 
-    def feature_names(self, zone: str | None = None) -> list[str]:
-        """Return active feature names for the specified zone excluding target and Date."""
+    def feature_names(self, zone: str | None = None, feature_set: str = FEATURE_SET_ALL) -> list[str]:
+        """
+        Return active feature names for the specified zone and feature set.
+        Feature sets:
+          - 'all': All features (macro + neighbor).
+          - 'set1_macro': Own VWAP history, auction prices, AR lags, fundamentals, balancing (no neighbors).
+          - 'set2_neighbor': Neighbor prices, spreads, cross-zone spreads, volumes, trades + naive anchor.
+          - 'set3_fundamental': Pure fundamentals (load, solar, wind, balancing, calendar) + naive anchor.
+        """
         excl = {"Date"}
         if zone:
             excl.add(TARGET_COL_PATTERN.format(zone=zone))
-            cols = self._zone_features.get(zone, [])
-            return [c for c in cols if c not in excl]
+            all_cols = [c for c in self._zone_features.get(zone, []) if c not in excl]
+
+            if feature_set == FEATURE_SET_ALL:
+                return all_cols
+            elif feature_set == FEATURE_SET_MACRO:
+                return [
+                    c for c in all_cols
+                    if "_nb_" not in c and "_vs_DE_nb_" not in c and not c.startswith("DE_nb_")
+                    and "_id_balance" not in c and "_id_trade_to_self" not in c
+                ]
+            elif feature_set == FEATURE_SET_NEIGHBOR:
+                bench = BENCHMARK_COL_PATTERN.format(zone=zone)
+                nb_cols = [c for c in self._neighbor_features.get(zone, [])]
+                if bench in all_cols and bench not in nb_cols:
+                    return [bench] + nb_cols
+                return nb_cols
+            elif feature_set == FEATURE_SET_FUNDAMENTAL:
+                bench = BENCHMARK_COL_PATTERN.format(zone=zone)
+                fund_keywords = ("load", "solar", "wind", "MRL", "SRL", "Weekday", "prediction_error")
+                fund_cols = [c for c in all_cols if any(kw in c for kw in fund_keywords) and "_nb_" not in c and "_vs_DE_nb_" not in c and "_id_balance" not in c and "_id_trade_to_self" not in c]
+                if bench in all_cols and bench not in fund_cols:
+                    return [bench] + fund_cols
+                return fund_cols
+            elif feature_set == FEATURE_SET_BALANCE:
+                bench = BENCHMARK_COL_PATTERN.format(zone=zone)
+                bal_cols = [c for c in self._balance_features.get(zone, [])]
+                if bench in all_cols and bench not in bal_cols:
+                    return [bench] + bal_cols
+                return bal_cols
+            else:
+                raise ValueError(f"Unknown feature_set: '{feature_set}'. Choose from: 'all', 'set1_macro', 'set2_neighbor', 'set3_fundamental', 'set4_balance'.")
+
         for z in ZONES:
             excl.add(TARGET_COL_PATTERN.format(zone=z))
         all_cols = sorted(set(c for cols in self._zone_features.values() for c in cols))
         return [c for c in all_cols if c not in excl]
 
-    def n_features(self, zone: str | None = None) -> int:
-        return len(self.feature_names(zone))
+    def n_features(self, zone: str | None = None, feature_set: str = FEATURE_SET_ALL) -> int:
+        return len(self.feature_names(zone, feature_set=feature_set))
 
     def close(self):
         """No-op for in-memory backend, maintains context manager compatibility."""

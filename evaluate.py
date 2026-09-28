@@ -16,28 +16,17 @@ import pandas as pd
 from scipy.stats import t as t_dist
 
 
-# ---------------------------------------------------------------------------
-# DM test
-# ---------------------------------------------------------------------------
-
 def dm_test(
     e_model: np.ndarray,
     e_bm: np.ndarray,
     h: int = 1,
 ) -> tuple[float, float]:
-    """
-    Diebold-Mariano (1995) test: H0 = models have equal predictive accuracy.
-
-    Parameters
-    ----------
-    e_model : forecast errors of the model (y_true - y_hat_model)
-    e_bm    : forecast errors of the benchmark
-    h       : forecast horizon (1 for one-step-ahead)
-
-    Returns
-    -------
-    (dm_statistic, p_value)  p_value < 0.05 → model significantly beats benchmark
-    """
+    """Diebold-Mariano test: H0 = models have equal predictive accuracy.
+    Parameters:
+      - e_model: forecast errors of the model (y_true - y_hat_model)
+      - e_bm: forecast errors of the benchmark
+      - h: forecast horizon (1 for one-step-ahead)
+    Returns: (dm_statistic, p_value)"""
     d = np.abs(e_model) - np.abs(e_bm)
     n = len(d)
     if n < 2:
@@ -51,12 +40,60 @@ def dm_test(
     return float(dm_stat), float(p_val)
 
 
-# ---------------------------------------------------------------------------
-# Aggregation
-# ---------------------------------------------------------------------------
+def load_results(results_path: str, zone: str = "DE2") -> pd.DataFrame:
+    """Load and validate results from NPZ or CSV."""
+    if results_path.endswith(".npz"):
+        data = np.load(results_path)
+        base = os.path.basename(results_path)
+        for z in ["DE1", "DE2", "DE3", "DE4"]:
+            if z in base:
+                zone = z
+                break
+        dates = data["dates"]
+        qh_idx = data["qh_idx"]
+        y_true = data["y_true"]
+        bm = data["benchmark"]
 
-def load_results(results_path: str) -> pd.DataFrame:
-    """Load and validate a results CSV."""
+        rows = []
+        model_keys = [
+            ("pred_lr", "lr"),
+            ("pred_lasso", "lasso"),
+            ("pred_csvr", "csvr_s1"),
+            ("pred_csvr_s1", "csvr_s1"),
+            ("pred_csvr_s2", "csvr_s2"),
+            ("pred_csvr_s3", "csvr_s3"),
+            ("pred_csvr_s4", "csvr_s4"),
+            ("pred_maml", "maml_s1"),
+            ("pred_maml_s1", "maml_s1"),
+            ("pred_maml_s2", "maml_s2"),
+            ("pred_maml_s3", "maml_s3"),
+            ("pred_maml_s4", "maml_s4"),
+            ("pred_csvr_ens_pure", "csvr_ens_pure"),
+            ("pred_csvr_ens_wn", "csvr_ens_wn"),
+            ("pred_maml_ens_pure", "maml_ens_pure"),
+            ("pred_maml_ens_wn", "maml_ens_wn"),
+            ("pred_ens", "hybrid_ensemble"),
+        ]
+        dates_dt = pd.to_datetime(dates)
+        dfs = []
+        seen_models = set()
+        for pred_key, model_name in model_keys:
+            if pred_key in data and model_name not in seen_models:
+                seen_models.add(model_name)
+                preds = np.asarray(data[pred_key], dtype=np.float64)
+                dfs.append(
+                    pd.DataFrame({
+                        "zone": zone,
+                        "test_date": dates_dt,
+                        "qh_idx": qh_idx.astype(int),
+                        "model": model_name,
+                        "pred_eur": preds,
+                        "y_true_eur": y_true.astype(np.float64),
+                        "benchmark_eur": bm.astype(np.float64),
+                    })
+                )
+        return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
+
     df = pd.read_csv(results_path, parse_dates=["test_date"])
     required = {"zone", "qh_idx", "test_date", "model", "pred_eur", "y_true_eur", "benchmark_eur"}
     missing = required - set(df.columns)
@@ -69,9 +106,7 @@ def aggregate_results(
     df: pd.DataFrame,
     by: list[str] = ["zone", "model"],
 ) -> pd.DataFrame:
-    """
-    Compute MAE, rMAE, and DM test statistics aggregated over the given grouping.
-    """
+    """Compute MAE, rMAE, and DM test statistics aggregated over the given grouping."""
     rows = []
 
     for keys, grp in df.groupby(by):
@@ -106,7 +141,7 @@ def aggregate_results(
 
 
 def print_summary(df_agg: pd.DataFrame):
-    """Pretty-print aggregated results table."""
+    """Print aggregated results table."""
     print(f"\n{'Zone':<6} {'Model':<8} {'MAE':>8} {'rMAE':>8} {'DM':>8} {'p':>7}  Beats?  Sig?")
     print("-" * 70)
     for _, row in df_agg.iterrows():

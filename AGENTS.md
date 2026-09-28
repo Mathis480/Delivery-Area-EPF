@@ -13,6 +13,7 @@
 
 ### 2.2 Targets & Benchmark
 * **Regional Forecasting Targets:** `DE1_VWAP_0to30`, `DE2_VWAP_0to30`, `DE3_VWAP_0to30`, `DE4_VWAP_0to30`.
+* **Primary Reference Delivery Area:** Always prioritize **DE2 (Amprion)** for detailed cross-model comparisons, deep-dives, and reporting, as it represents the most liquid, structurally complete, and mature electricity delivery area in Germany. Avoid relying solely on DE1 due to regional structural idiosyncrasies.
 * **Naive Benchmark:** `{zone}_VWAP_90to105` (last fully observed and reported window at the effective 90-minute pre-delivery cutoff).
 * **National `VWAP_0to30` Rule:** Strictly an internal technical imputation fallback for zero-trade regional intervals. Never use it as a target, feature, or benchmark.
 
@@ -53,5 +54,21 @@ Never use raw company names in code, features, or model configs.
 ## 5. Experimental Setup & Backtesting Protocol
 * **Historical Lookback:** Fixed rolling window of **822 days** (~2.25 years, covering full Q4 2021 through 2023 history prior to 2024 test start).
 * **Validation Window:** Last **30 days** prior to test date ($T-30$ to $T-1$) for hyperparameter tuning and model adaptation.
-* **Test Horizon:** Calendar year **2024** (`2024-01-01` to `2024-12-31`), evaluated out-of-sample across all 96 QH/day.
+* **Test Horizon:** Calendar year **2024** (`2024-01-01` to `2024-12-31`), evaluated out-of-sample across all 96 QH/day (total 35,132 intervals up to 2024-12-31 22:45 UTC).
+
+### 5.1 Canonical 2024 Naive Benchmark Baselines (Ground Truth)
+Use these exact MAE baselines to validate future test and model runs for calendar year 2024 ($| \text{VWAP\_0to30} - \text{VWAP\_90to105} |$):
+* **DE1:** `26.2815 EUR/MWh`
+* **DE2:** `26.6818 EUR/MWh` (RMSE: `133.8644 EUR/MWh`, Median: `13.9600 EUR/MWh`)
+* **DE3:** `27.2725 EUR/MWh`
+* **DE4:** `27.2536 EUR/MWh`
+* **Total 2024 Observations:** $N = 35,132$ (zero NaNs across entire year).
+
+### 5.2 Model Competition Policy: Strict MAML-NN vs cSVR (No Hybrids)
+* **Strict Head-to-Head Evaluation:** The research evaluation is strictly designed as a 1:1 contest (**MAML-NN versus cSVR**).
+* **No Cross-Architecture Ensembles:** Ensembles combining MAML-NN and cSVR predictions together are **strictly prohibited / not wanted**. Never report or construct hybrid MAML+cSVR models.
+* Comparisons must strictly evaluate:
+  1. **Individual Feature Sets (S1, S2, S3, S4):** MAML-NN vs cSVR (and LASSO).
+  2. **Intra-Architecture Ensembles:** Pure MAML-NN Ensemble (S1..S4) vs Pure cSVR Ensemble (S1..S4).
+
 

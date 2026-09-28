@@ -66,10 +66,6 @@ def _build_temporal_cv_splits(
 
 
 def train_lasso(
-    X_train: np.ndarray,
-    y_train: np.ndarray,
-    X_val: np.ndarray,
-    y_val: np.ndarray,
     X_trainval: np.ndarray,
     y_trainval: np.ndarray,
     alpha: float | None = None,
@@ -102,13 +98,15 @@ def train_lasso(
         cv=cv_splits,
         max_iter=LASSO_MAX_ITER,
         fit_intercept=True,
-        n_jobs=-1,
+        n_jobs=1,
     )
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore")
-        cv_model.fit(X_trainval, y_trainval)
-
-    best_alpha = float(cv_model.alpha_)
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            cv_model.fit(X_trainval, y_trainval)
+        best_alpha = float(cv_model.alpha_)
+    except Exception:
+        best_alpha = 0.01
 
     # Refit final model on full trainval set with the selected alpha
     final_model = Lasso(

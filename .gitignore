@@ -60,9 +60,15 @@ Thumbs.db
 # ==============================================================================
 !*.py
 !*.ipynb
-!README.md
+!*.md
 !.gitkeep
 !.gitignore
-!AGENTS.md
 !features.csv
 !features.yaml
+
+# Archived & Scratch directories (experimental code, not synced via git)
+old/
+Old
+Old/
+scratch/
+
