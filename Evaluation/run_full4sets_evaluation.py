@@ -145,19 +145,19 @@ def generate_zone_plots(zone: str):
     heatmap_matrix = np.array([qh_rmae[m[0]] for m in models_to_eval[1:]])
     
     # Custom Colormap:
-    # rMAE <= 0.965 (> 3.5% Outperformance): Solid Royal Blue
-    # 0.965 < rMAE <= 1.000: Dark green to soft yellow
+    # rMAE <= 0.950 (> 5.0% Outperformance): Solid Royal Blue
+    # 0.950 < rMAE <= 1.000: Dark green to soft yellow
     # rMAE > 1.000: Soft yellow to dark red
     N = 512
     vals = np.linspace(0.92, 1.06, N)
     colors_list = []
     for v in vals:
-        if v <= 0.965:
-            # Solid Royal Blue for > 3.5% outperformance
+        if v <= 0.950:
+            # Solid Royal Blue for > 5.0% outperformance
             colors_list.append((0.10, 0.45, 0.91, 1.0))
         elif v <= 1.000:
             # Dark green to soft yellow
-            t = (v - 0.965) / (1.000 - 0.965)
+            t = (v - 0.950) / (1.000 - 0.950)
             r = 0.11 + t * (0.98 - 0.11)
             g = 0.55 + t * (0.98 - 0.55)
             b = 0.18 + t * (0.82 - 0.18)
@@ -183,13 +183,13 @@ def generate_zone_plots(zone: str):
     ax.set_yticks(range(len(models_to_eval) - 1))
     ax.set_yticklabels([m[0] for m in models_to_eval[1:]], fontsize=10, fontweight="bold")
     ax.set_xlabel("Quarter Hour of Delivery Day (UTC, 15-min Intervals)", fontsize=11, labelpad=8)
-    ax.set_title(f"rMAE Heatmap Across 15-Minute Quarter Hours — {ZONE_NAMES[zone]} (2024 Full Year)\n(Blue: >3.5% Outperformance | Green: 0% to 3.5% Outperformance | Red: Underperformance)", fontsize=12, fontweight="bold", pad=12)
+    ax.set_title(f"rMAE Heatmap Across 15-Minute Quarter Hours — {ZONE_NAMES[zone]} (2024 Full Year)\n(Blue: >5.0% Outperformance | Green: 0% to 5.0% Outperformance | Red: Underperformance)", fontsize=12, fontweight="bold", pad=12)
 
     # Colorbar
     cbar = plt.colorbar(im, ax=ax, fraction=0.025, pad=0.02)
-    cbar.set_ticks([0.92, 0.94, 0.965, 0.98, 1.00, 1.02, 1.04, 1.06])
-    cbar.set_ticklabels(["< 0.92", "0.94", "0.965 (+3.5%)", "0.98", "1.000 (Naive)", "1.02", "1.04", "> 1.06"])
-    cbar.set_label("rMAE (< 1.00 beats Naive | Blue: > 3.5% Outperformance)", fontsize=10)
+    cbar.set_ticks([0.92, 0.95, 0.98, 1.00, 1.02, 1.04, 1.06])
+    cbar.set_ticklabels(["< 0.92", "0.950 (+5.0%)", "0.98", "1.000 (Naive)", "1.02", "1.04", "> 1.06"])
+    cbar.set_label("rMAE (< 1.00 beats Naive | Blue: > 5.0% Outperformance)", fontsize=10)
 
     plt.tight_layout()
     plt.savefig(os.path.join(OUTPUT_DIR, f"full4sets_heatmap_{zone}.png"))
