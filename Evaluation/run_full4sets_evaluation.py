@@ -54,22 +54,21 @@ def generate_zone_plots(zone: str):
     y_true = data["y_true"]
     bm = data["benchmark"]
 
+    # Strictly MAML-NN vs cSVR (Rule 5.2: No cross-architecture hybrids)
     models_to_eval = [
-        ("Naive", bm_2d),
-        ("cSVR (S1 Macro)", data["pred_csvr_2d"]),
-        ("cSVR (S2 Neighbor)", data["pred_csvr_s2_2d"]),
-        ("cSVR (S3 Fund)", data["pred_csvr_s3_2d"]),
-        ("cSVR (S4 Balance)", data["pred_csvr_s4_2d"]),
+        ("Naive Benchmark", bm_2d),
+        ("cSVR (S1 Macro)", data["pred_csvr_s1_2d"] if "pred_csvr_s1_2d" in data else data["pred_csvr_2d"]),
         ("MAML (S1 Macro)", data["pred_maml_s1_2d"]),
+        ("cSVR (S2 Neighbor)", data["pred_csvr_s2_2d"]),
         ("MAML (S2 Neighbor)", data["pred_maml_s2_2d"]),
-        ("MAML (S3 Fund)", data["pred_maml_s3_2d"]),
-        ("MAML (S4 Balance)", data["pred_maml_s4_2d"]),
+        ("cSVR (S3 Fundamentals)", data["pred_csvr_s3_2d"]),
+        ("MAML (S3 Fundamentals)", data["pred_maml_s3_2d"]),
+        ("cSVR (S4 Balances)", data["pred_csvr_s4_2d"]),
+        ("MAML (S4 Balances)", data["pred_maml_s4_2d"]),
         ("Pure cSVR Ens (S1-S4)", data["pred_csvr_ens_pure_2d"]),
-        ("cSVR Ens (+Naive Daily)", data["pred_csvr_ens_wn_2d"]),
-        ("cSVR Ens (QH-Adaptive)", data["pred_csvr_ens_adapt_2d"]) if "pred_csvr_ens_adapt_2d" in data else ("cSVR Ens (+Naive)", data["pred_csvr_ens_wn_2d"]),
         ("Pure MAML Ens (S1-S4)", data["pred_maml_ens_pure_2d"]),
-        ("MAML Ens (QH-Adaptive)", data["pred_maml_ens_wn_2d"]),
-        ("Hybrid Ens (QH-Adaptive)", data["pred_ens_2d"]),
+        ("cSVR Ens (+Naive)", data["pred_csvr_ens_wn_2d"]),
+        ("MAML Ens (+Naive)", data["pred_maml_ens_wn_2d"]),
     ]
 
     # Compute hourly rMAE
@@ -88,28 +87,24 @@ def generate_zone_plots(zone: str):
 
     # Color palette
     colors = {
-        "cSVR (S2 Neighbor)": "#1f77b4",
-        "cSVR (S3 Fund)": "#2ca02c",
-        "MAML (S2 Neighbor)": "#ff7f0e",
-        "Pure cSVR Ens (S1-S4)": "#9467bd",
-        "cSVR Ens (+Naive Daily)": "#d62728",
-        "cSVR Ens (QH-Adaptive)": "#8c564b",
-        "MAML Ens (QH-Adaptive)": "#e377c2",
-        "Hybrid Ens (QH-Adaptive)": "#00aa55",
+        "cSVR (S2 Neighbor)": ("#1f77b4", ":", 1.8, None),
+        "MAML (S2 Neighbor)": ("#ff7f0e", ":", 2.0, None),
+        "Pure cSVR Ens (S1-S4)": ("#2ca02c", "-", 2.5, "o"),
+        "Pure MAML Ens (S1-S4)": ("#d62728", "-", 2.5, "s"),
+        "cSVR Ens (+Naive)": ("#9467bd", "--", 2.0, "^"),
+        "MAML Ens (+Naive)": ("#e377c2", "--", 2.0, "v"),
     }
 
-    for name, col in colors.items():
+    for name, (col, ls, lw, marker) in colors.items():
         if name in hourly_rmae:
-            ls = "-" if "Ens" in name or "Hybrid" in name else ":"
-            lw = 2.4 if "Ens" in name or "Hybrid" in name else 1.5
-            ax.plot(hours, hourly_rmae[name], label=name, color=col, linestyle=ls, linewidth=lw, marker="o" if "Ens" in name else None, markersize=4)
+            ax.plot(hours, hourly_rmae[name], label=name, color=col, linestyle=ls, linewidth=lw, marker=marker, markersize=4)
 
     ax.set_title(f"2024 Out-of-Sample Relative MAE (rMAE) by Hour — {ZONE_NAMES[zone]}", fontsize=14, fontweight="bold", pad=12)
     ax.set_xlabel("Delivery Hour (UTC)", fontsize=12)
     ax.set_ylabel("Relative MAE (rMAE vs Naive)", fontsize=12)
     ax.set_xticks(hours)
     ax.set_xticklabels([f"{h:02d}:00" for h in hours], rotation=45)
-    ax.set_ylim(0.94, 1.06)
+    ax.set_ylim(0.95, 1.04)
     ax.legend(loc="upper right", framealpha=0.9, fontsize=9, ncol=2)
     plt.tight_layout()
     plt.savefig(os.path.join(OUTPUT_DIR, f"full4sets_by_hour_{zone}.png"))
@@ -119,14 +114,14 @@ def generate_zone_plots(zone: str):
     heatmap_matrix = np.array([hourly_rmae[m[0]] for m in models_to_eval[1:]])
     fig, ax = plt.subplots(figsize=(14, 8), dpi=150)
     cmap = plt.cm.RdYlGn_r
-    norm = mcolors.TwoSlopeNorm(vmin=0.94, vcenter=1.00, vmax=1.06)
+    norm = mcolors.TwoSlopeNorm(vmin=0.96, vcenter=1.00, vmax=1.04)
     im = ax.imshow(heatmap_matrix, aspect="auto", cmap=cmap, norm=norm)
 
     ax.set_xticks(np.arange(24))
     ax.set_xticklabels([f"{h:02d}:00" for h in hours], rotation=45, fontsize=9)
     ax.set_yticks(np.arange(len(models_to_eval) - 1))
     ax.set_yticklabels([m[0] for m in models_to_eval[1:]], fontsize=10)
-    ax.set_title(f"rMAE Heatmap Across Delivery Hours (UTC) — {ZONE_NAMES[zone]} (2024)", fontsize=13, fontweight="bold", pad=12)
+    ax.set_title(f"rMAE Heatmap Across Delivery Hours (UTC) — {ZONE_NAMES[zone]} (2024 Full Year)", fontsize=13, fontweight="bold", pad=12)
 
     # Colorbar
     cbar = plt.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
@@ -135,7 +130,7 @@ def generate_zone_plots(zone: str):
     plt.savefig(os.path.join(OUTPUT_DIR, f"full4sets_heatmap_{zone}.png"))
     plt.close()
 
-    print(f"Generated plots for {zone} -> {OUTPUT_DIR}")
+    print(f"Generated updated plots for {zone} -> {OUTPUT_DIR}")
 
 def main():
     for z in ZONES:
