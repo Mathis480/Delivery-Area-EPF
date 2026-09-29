@@ -1,7 +1,8 @@
 """
-MAML-NN with Generalized Negative Correlation Learning (GNCL) for per-QH EPF Forecasting.
-Implements Model-Agnostic Meta-Learning (Finn et al., 2017) with cooperative GNCL multi-set
-backbone pre-training (Buschjäger, Pfahler & Morik, 2020) and proximal soft-thresholding.
+MAML-NN (Model-Agnostic Meta-Learning Neural Network) for per-QH EPF Forecasting.
+Implements Model-Agnostic Meta-Learning (Finn et al., 2017) with warm-start backbone
+pre-training, linear bypass with smooth saturation, regime-based nearest-neighbor
+support set sampling, and proximal soft-thresholding.
 """
 from __future__ import annotations
 
@@ -202,7 +203,12 @@ class MAMLManager:
         support_k: int = MAML_SUPPORT_K,
         return_residual: bool = False,
     ) -> float:
-        """Fast compiled inner-loop adaptation starting from warm-start backbone."""
+        """Fast compiled inner-loop adaptation starting from warm-start backbone.
+
+        Note: qh_idx is retained for backtest loop interface compatibility; the shared
+        backbone weights are unified across all quarter-hours.
+        inner_steps is compiled statically into _adapt_and_predict_graph to prevent graph retracing.
+        """
         if self._backbone_weights is None:
             raise RuntimeError(f"[MAML {self.zone}] Shared backbone not initialized.")
 

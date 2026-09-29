@@ -6,9 +6,15 @@ Theoretical Foundation:
 Following Puć & Janczura (2024, Eq. 12; arXiv:2411.16237v1) and their official replication
 repository (https://github.com/pucandrzej/replication_cSVR/tree/main/Forecasting):
 
+0. **Correlation-Based Feature Filtering (Puć & Janczura 2024, Sec. 2.2):**
+   Prior to kernel evaluation and model training, collinear variables are pruned
+   strictly ex-ante on the rolling training set (via `np.corrcoef` on X_train):
+   - S1 (Macro): |r| >= 0.80 (broad price information, heavily pruned).
+   - S2 (Neighbor): |r| >= 0.95 (conservative threshold to preserve limited neighbor signals).
+
 1. **Feature Distance (Laplace Kernel):**
    Pairwise Euclidean distances d_X(x_i, x_j) = ||x_i - x_j||_2 are computed on standardized
-   and zero-variance-filtered features. The Laplace kernel width is set via quantile heuristics:
+   and filtered features. The Laplace kernel width is set via quantile heuristics:
        l = log(2 - 2 * q_kernel) / quantile(d_X, q_data)
    with q_kernel = 0.75 and q_data = 0.50.
 
@@ -52,14 +58,13 @@ from config import (
 def _remove_zerovar(
     X: np.ndarray, threshold: float = 1e-10
 ) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Remove near-zero-variance columns from X.
 
-    Returns
-    -------
+    """Remove near-zero-variance columns from X.
+
+    Returns:
     X_filtered : np.ndarray  — columns with sufficient variance
-    mask       : np.ndarray  — boolean mask of kept columns (for reuse at test time)
-    """
+    mask       : np.ndarray  — boolean mask of kept columns (for reuse at test time)"""
+
     var = np.var(X, axis=0)
     mask = var > threshold
     if mask.sum() == 0:

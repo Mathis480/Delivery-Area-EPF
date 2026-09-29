@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+#%%
 """
-Comprehensive 4-Feature-Set Evaluation & Publication Plot Generator (2024).
-Generates:
+4-Feature-Set Evaluation
   1. Hour-by-hour rMAE plots for each zone comparing sets and ensembles.
   2. Multi-model rMAE heatmaps across the 24 hours (96 QH) of the trading day.
   3. Diebold-Mariano significance matrix heatmaps.
-  4. Final aggregated Markdown and CSV leaderboards.
+
 """
 import os
 import sys
@@ -18,6 +18,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import warnings
+import matplotlib.ticker as ticker
 warnings.filterwarnings("ignore")
 
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -50,39 +51,6 @@ def generate_zone_plots(zone: str):
     data = np.load(npz_path)
     y_true_2d = data["y_true_2d"]
     bm_2d = data["benchmark_2d"]
-    qh_arr = data["qh_idx"]
-    y_true = data["y_true"]
-    bm = data["benchmark"]
-
-    # Strictly MAML-NN vs cSVR (Rule 5.2: No cross-architecture hybrids)
-    models_to_eval = [
-        ("Naive Benchmark", bm_2d),
-        ("cSVR (S1 Macro)", data["pred_csvr_s1_2d"] if "pred_csvr_s1_2d" in data else data["pred_csvr_2d"]),
-        ("MAML (S1 Macro)", data["pred_maml_s1_2d"]),
-        ("cSVR (S2 Neighbor)", data["pred_csvr_s2_2d"]),
-        ("MAML (S2 Neighbor)", data["pred_maml_s2_2d"]),
-        ("cSVR (S3 Fundamentals)", data["pred_csvr_s3_2d"]),
-        ("MAML (S3 Fundamentals)", data["pred_maml_s3_2d"]),
-        ("cSVR (S4 Balances)", data["pred_csvr_s4_2d"]),
-        ("MAML (S4 Balances)", data["pred_maml_s4_2d"]),
-        ("Pure cSVR Ens (S1-S4)", data["pred_csvr_ens_pure_2d"]),
-        ("Pure MAML Ens (S1-S4)", data["pred_maml_ens_pure_2d"]),
-        ("cSVR Ens (+Naive)", data["pred_csvr_ens_wn_2d"]),
-        ("MAML Ens (+Naive)", data["pred_maml_ens_wn_2d"]),
-    ]
-
-import matplotlib.ticker as ticker
-
-def generate_zone_plots(zone: str):
-    npz_path = os.path.join(RESULTS_DIR, f"results_{zone}_full4sets_2024.npz")
-    if not os.path.exists(npz_path):
-        return
-    data = np.load(npz_path)
-    y_true_2d = data["y_true_2d"]
-    bm_2d = data["benchmark_2d"]
-    qh_arr = data["qh_idx"]
-    y_true = data["y_true"]
-    bm = data["benchmark"]
 
     # Strictly MAML-NN vs cSVR (Rule 5.2: No cross-architecture hybrids)
     models_to_eval = [
@@ -144,26 +112,22 @@ def generate_zone_plots(zone: str):
     # 2. Plot: 96-QH Heatmap
     heatmap_matrix = np.array([qh_rmae[m[0]] for m in models_to_eval[1:]])
     
-    # Custom Colormap:
-    # rMAE <= 0.950 (> 5.0% Outperformance): Solid Royal Blue
-    # 0.950 < rMAE <= 1.000: Dark green to soft yellow
+    # rMAE <= 0.950: > 5.0% Outperformance : Blue
+    # rMAE > 0.950:  Dark green to soft yellow
     # rMAE > 1.000: Soft yellow to dark red
     N = 512
     vals = np.linspace(0.92, 1.06, N)
     colors_list = []
     for v in vals:
         if v <= 0.950:
-            # Solid Royal Blue for > 5.0% outperformance
             colors_list.append((0.10, 0.45, 0.91, 1.0))
         elif v <= 1.000:
-            # Dark green to soft yellow
             t = (v - 0.950) / (1.000 - 0.950)
             r = 0.11 + t * (0.98 - 0.11)
             g = 0.55 + t * (0.98 - 0.55)
             b = 0.18 + t * (0.82 - 0.18)
             colors_list.append((r, g, b, 1.0))
         else:
-            # Soft yellow to dark red
             t = min(1.0, (v - 1.000) / (1.060 - 1.000))
             r = 0.98 - t * (0.98 - 0.78)
             g = 0.98 - t * (0.98 - 0.12)

@@ -97,24 +97,23 @@ LASSO_MAX_ITER = 3000
 LASSO_TOL      = 1e-3
 LASSO_CV_DAYS  = 14           # Temporal CV window for alpha selection (last 14 days as holdout folds)
 
-# MAML-NN Champion Configuration (Updated with 128x64, tanh, inner_lr=0.002, 56-day pool)
-MAML_HIDDEN_SIZES         = [128, 64]   # 2-layer MLP (Large architecture, powers of 2)
+# MAML-NN Architecture & Hyperparameters
+MAML_HIDDEN_SIZES         = [128, 64]   # 2-layer MLP architecture
 MAML_DROPOUT              = 0.0         # No dropout during meta-training
-MAML_ACTIVATION           = "tanh"      # Bounded Tanh activation against summer price spikes
+MAML_ACTIVATION           = "tanh"      # Bounded Tanh activation
 MAML_L1_REG               = 1e-4        # L1 shrinkage penalty on weights
 MAML_META_LR              = 5e-4        # Outer loop (meta) learning rate
-MAML_INNER_LR             = 0.0025      # Fast inner loop adaptation learning rate (tuned for 8 steps)
+MAML_INNER_LR             = 0.0025      # Fast inner loop adaptation learning rate
 MAML_INNER_STEPS          = 8           # Gradient steps during fast adaptation
 MAML_SUPPORT_WEIGHTING    = "soft_kernel" # Support weighting: 'uniform' or 'soft_kernel'
 MAML_KERNEL_TAU           = 4.0         # Temperature scale factor for soft kernel support weighting
 MAML_PROX_SHRINK          = 1e-5        # Proximal soft-thresholding shrinkage operator
 MAML_CLIP_RESIDUAL        = None        # Unconstrained NN residual
-MAML_USE_LINEAR_BYPASS    = True        # Modular toggle: True = LASSO+NN hybrid with bounded linear bypass
+MAML_USE_LINEAR_BYPASS    = True        # Linear bypass with bounded saturation
 MAML_BYPASS_SATURATION_M  = 0.15        # Max deviation allowed for linear bypass in multiples of sigma_y (smooth tanh)
 MAML_SUPPORT_SELECTION    = "regime_l1" # L1 distance nearest regimes within pool window
 MAML_SUPPORT_K            = 28          # Number of support days selected for inner adaptation
-MAML_SUPPORT_POOL_DAYS    = 822         # Support pool window (Full 822-day historical training pool like cSVR)
-MAML_GNCL_LAMBDA          = 0.05        # Multi-set coupling parameter
+MAML_SUPPORT_POOL_DAYS    = 822         # Support pool window (full 822-day historical training pool)
 
 MAML_META_EPOCHS          = 6           # Warm-start shared backbone training epochs
 MAML_BACKBONE_BATCH       = 256         # Batch size for backbone pre-training
