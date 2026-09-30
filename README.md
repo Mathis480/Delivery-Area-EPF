@@ -14,7 +14,7 @@ The study evaluates Model-Agnostic Meta-Learning Neural Networks (**MAML-NN**) a
 
 The master dataset integrates 15-minute continuous electricity contracts covering **October 1, 2021 to December 31, 2024** (Q4 2021 through 2024):
 * **Observations ($N$):** 114,052 continuous quarter-hours without any missing intervals.
-* **Features ($K$):** 962 aligned cross-domain variables defined in [`features.csv`](features.csv).
+* **Features ($K$):** 910 aligned cross-domain variables defined in [`features.csv`](features.csv) (338 direct active features for $k=0$, 52 safe ex-post neighbor inputs for $k \in [-4, -1]$ under `only past products`, 520 excluded under `no`).
 * **Missing Values:** Zero NaNs across the entire evaluation horizon via hierarchical fallback imputation.
 * **Time Standard:** Strictly Pure UTC (`+00:00` / `Z`) across all sources and models.
 
@@ -56,8 +56,7 @@ L1-regularized regression with temporal expanding-window cross-validation for al
 Faithful port of Puć & Janczura (2024, Eq. 12).
 * **Kernel:** Laplace kernel on standardized features multiplied by a Gaussian correction kernel on the standardized naive benchmark:
   $$K(x_i, x_j) = \exp\left(-\gamma \|x_i - x_j\|_2\right) \cdot \exp\left(-\frac{1}{2\sigma^2} (P_i^{\text{naive}} - P_j^{\text{naive}})^2\right)$$
-* **Hyperparameters:** $C = 1.0$, $\epsilon = 0.1$, $\gamma$ and $\sigma$ derived adaptively from distance quantiles.
-* **Feature Filtering:** Zero-variance removal and optional correlation filtering ($|r| \ge 0.80$ for S1 Macro, $|r| \ge 0.95$ for S2 Neighbor).
+* **Feature Filtering:** Zero-variance removal (correlation filtering was evaluated and omitted due to performance degradation; see [`old/corrfilter/pure_csvr_ensemble_corrfilter_comparison.txt`](old/corrfilter/pure_csvr_ensemble_corrfilter_comparison.txt)).
 
 ### 3.3 MAML-NN (Model-Agnostic Meta-Learning Neural Network)
 Addresses small-sample limitations ($N \approx 792$ observations per quarter-hour) via meta-learning (Finn et al., 2017):
@@ -94,11 +93,11 @@ Delivery-Area-EPF/
 ├── AGENTS.md                          # Workspace rules, TSO mapping & benchmark ground truth
 ├── README.md                          # Methodology, architecture & reproduction guide
 ├── config.py                          # Central configuration and hyperparameters
-├── features.csv                       # Feature catalog (962 variable definitions)
+├── features.csv                       # Feature catalog (910 variable definitions)
 ├── data_loader.py                     # Rolling QH data loader with ex-ante shifting & scaling
 │
 ├── Data/
-│   ├── master_dataset.parquet         # Master dataset (114,052 x 962)
+│   ├── master_dataset.parquet         # Master dataset (114,060 x 934)
 │   ├── convert_to_parquet.py          # CSV to Parquet conversion script
 │   └── [Auktions- und Marktdaten-Verzeichnisse]
 │
@@ -110,7 +109,6 @@ Delivery-Area-EPF/
 │   └── ensemble.py                    # Rolling inverse-MAE weighted forecast averaging
 │
 ├── run_full_4sets_backtest_2024.py    # Full 4-set backtest runner (LASSO, cSVR, MAML-NN)
-├── run_csvr_corrfilter_2024.py        # cSVR correlation filter ablation runner
 │
 ├── Evaluation/
 │   ├── run_full4sets_evaluation.py    # 15-minute QH curves and rMAE heatmaps generator

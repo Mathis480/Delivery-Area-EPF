@@ -1,5 +1,7 @@
 # Agent Instructions & Workspace Rules
 
+> **Top Rule:** No human likes to read a lot of text. Especially not in the documentation. Therefore, avoid lengthy explanations and stick to the point.
+
 ## 1. Language Policy
 * **User Chat:** Match user's language (German/English).
 * **Code & Artifacts:** Strictly English (code, documentation, comments, commit messages).
@@ -7,13 +9,13 @@
 ## 2. Core Methodological Rules
 
 ### 2.1 Time Series Grid & UTC Base
-* All data must use strictly **Pure UTC (`+00:00` / `Z`)**.
+* All data must use strictly **UTC (`+00:00` / `Z`)**.
 * Master index `Date` represents delivery start time ($t_{\text{delivery}}$).
 * Continuous 15-minute grid must remain complete and unbroken across the entire dataset. Never drop rows.
 
 ### 2.2 Targets & Benchmark
 * **Regional Forecasting Targets:** `DE1_VWAP_0to30`, `DE2_VWAP_0to30`, `DE3_VWAP_0to30`, `DE4_VWAP_0to30`.
-* **Primary Reference Delivery Area:** Always prioritize **DE2 (Amprion)** for detailed cross-model comparisons, deep-dives, and reporting, as it represents the most liquid, structurally complete, and mature electricity delivery area in Germany. Avoid relying solely on DE1 due to regional structural idiosyncrasies.
+* **Primary Reference Delivery Area:** Always prioritize **DE2 (Amprion)** for detailed cross-model comparisons, deep-dives, and reporting, as it represents a liquid and structurally complete electricity delivery area in Germany. Avoid relying solely on DE1 due to regional structural idiosyncrasies.
 * **Naive Benchmark:** `{zone}_VWAP_90to105` (last fully observed and reported window at the effective 90-minute pre-delivery cutoff).
 * **National `VWAP_0to30` Rule:** Strictly an internal technical imputation fallback for zero-trade regional intervals. Never use it as a target, feature, or benchmark.
 
@@ -30,6 +32,11 @@
 * **Ex-Post Features (Fundamentals & Reserves):**
   * All realized/ex-post features (actual generation, demand, cross-border flows, balancing activations flagged with `shift_needed_2h = "x"` in `features.csv`) must be lagged by at least **8 quarter-hours (120 minutes / 2 hours)** prior to delivery.
 * **No Backward Fill:** `bfill` is strictly prohibited.
+
+### 2.4 Feature Catalogue & `keep` Policy (910 Variables in `features.csv`)
+* `yes` (338): Direct features for target contract $k=0$ ($t \le t_{\text{delivery}} - 90\text{ min}$).
+* `only past products` (52): Safe neighbor windows (`30to45`..`75to90`) shifted for $k \in [-4, -1]$. Strictly forbidden as direct features for $k=0$.
+* `no` (520): Excluded / inactive variables.
 
 ## 3. TSO Delivery Area Mapping
 Always map German TSOs 1:1 to official EPEX delivery area prefixes:

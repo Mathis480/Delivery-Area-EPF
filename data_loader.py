@@ -46,12 +46,16 @@ def load_feature_catalogue(
     """Parse features.csv to retrieve:
       - zone-specific active feature lists ('DE1'..'DE4') -> active feature names
         combining national ('all') features and zone-specific ('DEx') features.
+        Only features with keep='yes' and scenario/S1='x' are selected as direct features.
+        Features with keep='only past products' (windows 30to45, 45to60, 60to75, 75to90)
+        are ex-post neighbor inputs constructed dynamically via NEIGHBOR_SAFE_VWAP_WINDOWS
+        with safe .shift(-k) and are never loaded directly to prevent look-ahead bias.
       - All ex-post/realized columns across all zones requiring 2h backward shift.""" 
 
     feat = pd.read_csv(features_csv)
-    mask_keep = feat["keep"].astype(str).str.strip().str.lower() == "yes"
-    mask_sc = feat[scenario].astype(str).str.strip().str.lower() == "x"
-    active_df = feat[mask_keep & mask_sc]
+    sc_col = scenario if scenario in feat.columns else ("S1" if "S1" in feat.columns else "scenario1")
+    mask_sc = feat[sc_col].astype(str).str.strip().str.lower().isin(["x", sc_col.lower()])
+    active_df = feat[mask_sc]
 
     zone_features: dict[str, list[str]] = {}
     for zone in ["DE1", "DE2", "DE3", "DE4"]:
@@ -145,11 +149,16 @@ class QHDataLoader:
         nb_series = {}
 
         # 1. National neighbor series
+        # For future contracts (k > 0) at the terminal boundary (31.12. 22:30/22:45 UTC), 2025 products lie outside the dataset.
+        # We forward-fill the last observed neighbor values to avoid spurious self-proxying with the target contract's own windows.
         for k, win in NEIGHBOR_SAFE_VWAP_WINDOWS.items():
             nat_src = f"VWAP_{win}"
             nat_nb = f"DE_nb_k{k:+d}_VWAP_{win}"
             if nat_src in df.columns:
-                nb_series[nat_nb] = df[nat_src].shift(-k).ffill().bfill()
+                nat_val = df[nat_src].shift(-k)
+                if k > 0:
+                    nat_val = nat_val.ffill()
+                nb_series[nat_nb] = nat_val
 
         # 2. Regional neighbor series, spreads, volumes, trades
         self._neighbor_features: dict[str, list[str]] = {z: [] for z in ZONES}
@@ -161,7 +170,14 @@ class QHDataLoader:
                 nat_nb = f"DE_nb_k{k:+d}_VWAP_{win}"
 
                 if reg_src in df.columns:
-                    nb_val = df[reg_src].shift(-k).ffill().bfill()
+                    nb_val = df[reg_src].shift(-k)
+                    # Strictly boundary forward-fill for future contracts (k > 0)
+                    if k > 0:
+                        nb_val = nb_val.ffill()
+                    # Regional fallback to national aggregate in the same neighbor window (Rule 4)
+                    if nat_nb in nb_series:
+                        nb_val = nb_val.fillna(nb_series[nat_nb])
+
                     nb_series[reg_nb] = nb_val
                     self._neighbor_features[zone].append(reg_nb)
 
@@ -176,7 +192,7 @@ class QHDataLoader:
                         nb_series[cross_col] = nb_val - nb_series[nat_nb]
                         self._neighbor_features[zone].append(cross_col)
 
-                # Volumes and trades for neighbor windows
+                # Volumes and trades for neighbor windows: strictly fillna(0.0) per AGENTS.md
                 vol_src = f"{zone}_VWAP_total_volume_{win}"
                 if vol_src in df.columns:
                     vol_col = f"{zone}_nb_k{k:+d}_vol"
@@ -198,21 +214,50 @@ class QHDataLoader:
         if nb_series:
             df = pd.concat([df, pd.DataFrame(nb_series, index=df.index)], axis=1)
 
-        # 3. Zone Balances & Cross-Border Intraday Trading Positions (Set 4)
-        safe_bal_windows = (
-            "345to360", "330to345", "315to330", "300to315", "285to300", "270to285",
-            "255to270", "240to255", "225to240", "210to225", "195to210", "180to195",
-            "165to180", "150to165", "135to150", "120to135", "105to120", "90to105",
-        )
+        # 3. Zone Balances & Sets S1..S4 (loaded directly from features.csv if present)
+        feat_df = pd.read_csv(features_csv)
         self._balance_features: dict[str, list[str]] = {z: [] for z in ZONES}
+        self._s1_features: dict[str, list[str]] = {z: [] for z in ZONES}
+        self._s3_features: dict[str, list[str]] = {z: [] for z in ZONES}
+
         for zone in ZONES:
-            for col in df.columns:
-                if col.startswith(zone) and ("_id_balance" in col or "_id_trade_to_self" in col):
-                    if any(col.endswith(f"_{w}") for w in safe_bal_windows):
-                        self._balance_features[zone].append(col)
-                        # Also register in _zone_features for FEATURE_SET_ALL
-                        if zone in self._zone_features and col not in self._zone_features[zone]:
-                            self._zone_features[zone].append(col)
+            mask_z = feat_df["model"].str.strip().isin(["all", zone])
+            bench = BENCHMARK_COL_PATTERN.format(zone=zone)
+            target_col = TARGET_COL_PATTERN.format(zone=zone)
+
+            # Set 4 (Balances)
+            if "S4" in feat_df.columns:
+                s4_cols = feat_df.loc[mask_z & feat_df["S4"].astype(str).str.strip().str.lower().isin(["x", "s4"]), "name"].str.strip().tolist()
+                self._balance_features[zone] = [c for c in s4_cols if c in available_cols and c != bench]
+            else:
+                safe_bal_windows = (
+                    "345to360", "330to345", "315to330", "300to315", "285to300", "270to285",
+                    "255to270", "240to255", "225to240", "210to225", "195to210", "180to195",
+                    "165to180", "150to165", "135to150", "120to135", "105to120", "90to105",
+                )
+                for col in df.columns:
+                    if col.startswith(zone) and ("_id_balance" in col or "_id_trade_to_self" in col):
+                        if any(col.endswith(f"_{w}") for w in safe_bal_windows):
+                            self._balance_features[zone].append(col)
+
+            # Set 1 (Macro)
+            if "S1" in feat_df.columns:
+                s1_cols = feat_df.loc[mask_z & feat_df["S1"].astype(str).str.strip().str.lower().isin(["x", "s1"]), "name"].str.strip().tolist()
+                self._s1_features[zone] = [c for c in s1_cols if c in available_cols and c != target_col]
+
+            # Set 3 (Fundamental)
+            if "S3" in feat_df.columns:
+                s3_raw = feat_df.loc[mask_z & feat_df["S3"].astype(str).str.strip().str.lower().isin(["x", "s3"]), "name"].str.strip().tolist()
+                fund_cols = [c for c in s3_raw if c in available_cols and c != target_col and c != bench]
+                if bench in available_cols:
+                    fund_cols = [bench] + fund_cols
+                self._s3_features[zone] = fund_cols
+
+            # Register balance, S1, and S3 features in _zone_features for FEATURE_SET_ALL
+            if zone in self._zone_features:
+                for col in self._balance_features[zone] + self._s1_features[zone] + self._s3_features[zone]:
+                    if col not in self._zone_features[zone]:
+                        self._zone_features[zone].append(col)
 
 
         # Map to delivery day and QH index (0..95) — PURE UTC, no timezone conversion
@@ -394,6 +439,8 @@ class QHDataLoader:
             if feature_set == FEATURE_SET_ALL:
                 return all_cols
             elif feature_set == FEATURE_SET_MACRO:
+                if self._s1_features.get(zone):
+                    return self._s1_features[zone]
                 return [
                     c for c in all_cols
                     if "_nb_" not in c and "_vs_DE_nb_" not in c and not c.startswith("DE_nb_")
@@ -406,6 +453,8 @@ class QHDataLoader:
                     return [bench] + nb_cols
                 return nb_cols
             elif feature_set == FEATURE_SET_FUNDAMENTAL:
+                if self._s3_features.get(zone):
+                    return self._s3_features[zone]
                 bench = BENCHMARK_COL_PATTERN.format(zone=zone)
                 fund_keywords = ("load", "solar", "wind", "MRL", "SRL", "Weekday", "prediction_error")
                 fund_cols = [c for c in all_cols if any(kw in c for kw in fund_keywords) and "_nb_" not in c and "_vs_DE_nb_" not in c and "_id_balance" not in c and "_id_trade_to_self" not in c]

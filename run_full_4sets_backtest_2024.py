@@ -75,7 +75,7 @@ def dm_test(actual: np.ndarray, pred1: np.ndarray, pred2: np.ndarray):
     return stat, p_val
 
 
-def run_zone_full4sets(zone: str, force_recompute_maml: bool = True):
+def run_zone_full4sets(zone: str, force_recompute_maml: bool = True, recompute_csvr: bool = True):
     print(f"\n=======================================================")
     print(f"       STARTING FULL 4-SETS BACKTEST FOR {zone} (2024)")
     print(f"=======================================================")
@@ -98,57 +98,49 @@ def run_zone_full4sets(zone: str, force_recompute_maml: bool = True):
 
     loader = QHDataLoader()
 
-    # Pre-train / load MAML backbones for all 4 sets
+    # Pre-train / load MAML backbones for all 4 sets (force retrain if new feature dimensions)
     maml_s1 = MAMLManager(zone, loader.n_features(zone, FEATURE_SET_MACRO), feature_set=FEATURE_SET_MACRO)
-    maml_s1.pretrain_backbone(loader, verbose=False)
+    maml_s1.pretrain_backbone(loader, verbose=False, force_retrain=force_recompute_maml)
 
     maml_s2 = MAMLManager(zone, loader.n_features(zone, FEATURE_SET_NEIGHBOR), feature_set=FEATURE_SET_NEIGHBOR)
-    maml_s2.pretrain_backbone(loader, verbose=False)
+    maml_s2.pretrain_backbone(loader, verbose=False, force_retrain=force_recompute_maml)
 
     maml_s3 = MAMLManager(zone, loader.n_features(zone, FEATURE_SET_FUNDAMENTAL), feature_set=FEATURE_SET_FUNDAMENTAL)
-    maml_s3.pretrain_backbone(loader, verbose=False)
+    maml_s3.pretrain_backbone(loader, verbose=False, force_retrain=force_recompute_maml)
 
     maml_s4 = MAMLManager(zone, loader.n_features(zone, FEATURE_SET_BALANCE), feature_set=FEATURE_SET_BALANCE)
-    maml_s4.pretrain_backbone(loader, verbose=False)
+    maml_s4.pretrain_backbone(loader, verbose=False, force_retrain=force_recompute_maml)
 
     out_npz = os.path.join(RESULTS_DIR, "annual_run_2024", f"results_{zone}_full4sets_2024.npz")
 
-    has_canonical_csvr = "pred_csvr_s1" in base_data and len(base_data["pred_csvr_s1"]) == n_total
-    if has_canonical_csvr:
-        print(f"[{zone}] Fast-loading canonical cSVR and LASSO predictions ({n_total} QH) - skipping redundant model training.")
-        pred_csvr_s1 = list(base_data["pred_csvr_s1"])
-        pred_csvr_s2 = list(base_data["pred_csvr_s2"])
-        pred_csvr_s3 = list(base_data["pred_csvr_s3"])
-        pred_csvr_s4 = list(base_data["pred_csvr_s4"])
-        pred_lasso_s1 = list(base_data["pred_lasso_s1"])
-        pred_lasso_s2 = list(base_data["pred_lasso_s2"])
-        pred_lasso_s3 = list(base_data["pred_lasso_s3"])
-        pred_lasso_s4 = list(base_data["pred_lasso_s4"])
-    else:
-        pred_lasso_s1, pred_lasso_s2, pred_lasso_s3, pred_lasso_s4 = [], [], [], []
-        pred_csvr_s1, pred_csvr_s2, pred_csvr_s3, pred_csvr_s4 = [], [], [], []
-
     checkpoint_path = os.path.join(RESULTS_DIR, "annual_run_2024", f"checkpoint_{zone}_full4sets.npz")
-    if force_recompute_maml or not os.path.exists(checkpoint_path):
-        if os.path.exists(checkpoint_path):
+    if force_recompute_maml or recompute_csvr or not os.path.exists(checkpoint_path):
+        if (force_recompute_maml and recompute_csvr) and os.path.exists(checkpoint_path):
             try:
                 os.remove(checkpoint_path)
             except Exception:
                 pass
         start_idx = 0
-        pred_maml_s1 = []
-        pred_maml_s2 = []
-        pred_maml_s3 = []
-        pred_maml_s4 = []
+        pred_lasso_s1, pred_lasso_s2, pred_lasso_s3, pred_lasso_s4 = [], [], [], []
+        pred_csvr_s1, pred_csvr_s2, pred_csvr_s3, pred_csvr_s4 = [], [], [], []
+        pred_maml_s1, pred_maml_s2, pred_maml_s3, pred_maml_s4 = [], [], [], []
     else:
         print(f"[{zone}] Found existing checkpoint at {checkpoint_path}, loading...")
         ckpt = np.load(checkpoint_path)
+        pred_lasso_s1 = list(ckpt["pred_lasso_s1"])
+        pred_lasso_s2 = list(ckpt["pred_lasso_s2"])
+        pred_lasso_s3 = list(ckpt["pred_lasso_s3"])
+        pred_lasso_s4 = list(ckpt["pred_lasso_s4"])
+        pred_csvr_s1 = list(ckpt["pred_csvr_s1"])
+        pred_csvr_s2 = list(ckpt["pred_csvr_s2"])
+        pred_csvr_s3 = list(ckpt["pred_csvr_s3"])
+        pred_csvr_s4 = list(ckpt["pred_csvr_s4"])
         pred_maml_s1 = list(ckpt["pred_maml_s1"])
         pred_maml_s2 = list(ckpt["pred_maml_s2"])
         pred_maml_s3 = list(ckpt["pred_maml_s3"])
         pred_maml_s4 = list(ckpt["pred_maml_s4"])
         start_idx = len(pred_maml_s1)
-        print(f"[{zone}] Resumed MAML from checkpoint at index {start_idx}/{n_total} ({start_idx/n_total*100:.1f}%).")
+        print(f"[{zone}] Resumed models from checkpoint at index {start_idx}/{n_total} ({start_idx/n_total*100:.1f}%).")
 
     t0 = time.time()
     pool_days = MAML_SUPPORT_POOL_DAYS if MAML_SUPPORT_SELECTION == "regime_l1" else VAL_DAYS
@@ -165,8 +157,15 @@ def run_zone_full4sets(zone: str, force_recompute_maml: bool = True):
         if w1 is not None and w1.X_trainval is not None:
             try:
                 m_l1, _ = train_lasso(w1.X_trainval, w1.y_trainval)
+                pred_lasso_s1.append(_backtransform(float(predict_lasso(m_l1, w1.X_test)[0]), w1.y_mean, w1.y_std, bench_eur))
                 lin_c1 = m_l1.coef_ if MAML_USE_LINEAR_BYPASS else None
                 lin_i1 = m_l1.intercept_ if MAML_USE_LINEAR_BYPASS else 0.0
+
+                if recompute_csvr:
+                    m_c1 = train_csvr(w1.X_trainval, w1.y_trainval, bm_trainval=w1.bm_trainval)
+                    p_c1_scaled = float(predict_csvr(m_c1, w1.X_test)[0])
+                    pred_csvr_s1.append(_backtransform(p_c1_scaled, w1.y_mean, w1.y_std, bench_eur))
+
                 p_maml_scaled1 = maml_s1.adapt_and_predict(
                     qh_idx=q,
                     X_support=w1.X_trainval,
@@ -185,8 +184,14 @@ def run_zone_full4sets(zone: str, force_recompute_maml: bool = True):
                 )
                 pred_maml_s1.append(_backtransform(p_maml_scaled1, w1.y_mean, w1.y_std, bench_eur))
             except Exception:
+                pred_lasso_s1.append(bench_eur)
+                if recompute_csvr:
+                    pred_csvr_s1.append(bench_eur)
                 pred_maml_s1.append(bench_eur)
         else:
+            pred_lasso_s1.append(bench_eur)
+            if recompute_csvr:
+                pred_csvr_s1.append(bench_eur)
             pred_maml_s1.append(bench_eur)
 
         # ---------------- SET 2 (Neighbor) ----------------
@@ -194,8 +199,15 @@ def run_zone_full4sets(zone: str, force_recompute_maml: bool = True):
         if w2 is not None and w2.X_trainval is not None:
             try:
                 m_l2, _ = train_lasso(w2.X_trainval, w2.y_trainval)
+                pred_lasso_s2.append(_backtransform(float(predict_lasso(m_l2, w2.X_test)[0]), w2.y_mean, w2.y_std, bench_eur))
                 lin_c2 = m_l2.coef_ if MAML_USE_LINEAR_BYPASS else None
                 lin_i2 = m_l2.intercept_ if MAML_USE_LINEAR_BYPASS else 0.0
+
+                if recompute_csvr:
+                    m_c2 = train_csvr(w2.X_trainval, w2.y_trainval, bm_trainval=w2.bm_trainval)
+                    p_c2_scaled = float(predict_csvr(m_c2, w2.X_test)[0])
+                    pred_csvr_s2.append(_backtransform(p_c2_scaled, w2.y_mean, w2.y_std, bench_eur))
+
                 p_maml_scaled2 = maml_s2.adapt_and_predict(
                     qh_idx=q,
                     X_support=w2.X_trainval,
@@ -214,8 +226,14 @@ def run_zone_full4sets(zone: str, force_recompute_maml: bool = True):
                 )
                 pred_maml_s2.append(_backtransform(p_maml_scaled2, w2.y_mean, w2.y_std, bench_eur))
             except Exception:
+                pred_lasso_s2.append(bench_eur)
+                if recompute_csvr:
+                    pred_csvr_s2.append(bench_eur)
                 pred_maml_s2.append(bench_eur)
         else:
+            pred_lasso_s2.append(bench_eur)
+            if recompute_csvr:
+                pred_csvr_s2.append(bench_eur)
             pred_maml_s2.append(bench_eur)
 
         # ---------------- SET 3 (Fundamental) ----------------
@@ -223,8 +241,15 @@ def run_zone_full4sets(zone: str, force_recompute_maml: bool = True):
         if w3 is not None and w3.X_trainval is not None:
             try:
                 m_l3, _ = train_lasso(w3.X_trainval, w3.y_trainval)
+                pred_lasso_s3.append(_backtransform(float(predict_lasso(m_l3, w3.X_test)[0]), w3.y_mean, w3.y_std, bench_eur))
                 lin_c3 = m_l3.coef_ if MAML_USE_LINEAR_BYPASS else None
                 lin_i3 = m_l3.intercept_ if MAML_USE_LINEAR_BYPASS else 0.0
+
+                if recompute_csvr:
+                    m_c3 = train_csvr(w3.X_trainval, w3.y_trainval, bm_trainval=w3.bm_trainval)
+                    p_c3_scaled = float(predict_csvr(m_c3, w3.X_test)[0])
+                    pred_csvr_s3.append(_backtransform(p_c3_scaled, w3.y_mean, w3.y_std, bench_eur))
+
                 p_maml_scaled3 = maml_s3.adapt_and_predict(
                     qh_idx=q,
                     X_support=w3.X_trainval,
@@ -243,8 +268,14 @@ def run_zone_full4sets(zone: str, force_recompute_maml: bool = True):
                 )
                 pred_maml_s3.append(_backtransform(p_maml_scaled3, w3.y_mean, w3.y_std, bench_eur))
             except Exception:
+                pred_lasso_s3.append(bench_eur)
+                if recompute_csvr:
+                    pred_csvr_s3.append(bench_eur)
                 pred_maml_s3.append(bench_eur)
         else:
+            pred_lasso_s3.append(bench_eur)
+            if recompute_csvr:
+                pred_csvr_s3.append(bench_eur)
             pred_maml_s3.append(bench_eur)
 
         # ---------------- SET 4 (Balance) ----------------
@@ -252,8 +283,15 @@ def run_zone_full4sets(zone: str, force_recompute_maml: bool = True):
         if w4 is not None and w4.X_trainval is not None:
             try:
                 m_l4, _ = train_lasso(w4.X_trainval, w4.y_trainval)
+                pred_lasso_s4.append(_backtransform(float(predict_lasso(m_l4, w4.X_test)[0]), w4.y_mean, w4.y_std, bench_eur))
                 lin_c4 = m_l4.coef_ if MAML_USE_LINEAR_BYPASS else None
                 lin_i4 = m_l4.intercept_ if MAML_USE_LINEAR_BYPASS else 0.0
+
+                if recompute_csvr:
+                    m_c4 = train_csvr(w4.X_trainval, w4.y_trainval, bm_trainval=w4.bm_trainval)
+                    p_c4_scaled = float(predict_csvr(m_c4, w4.X_test)[0])
+                    pred_csvr_s4.append(_backtransform(p_c4_scaled, w4.y_mean, w4.y_std, bench_eur))
+
                 p_maml_scaled4 = maml_s4.adapt_and_predict(
                     qh_idx=q,
                     X_support=w4.X_trainval,
@@ -272,11 +310,18 @@ def run_zone_full4sets(zone: str, force_recompute_maml: bool = True):
                 )
                 pred_maml_s4.append(_backtransform(p_maml_scaled4, w4.y_mean, w4.y_std, bench_eur))
             except Exception:
+                pred_lasso_s4.append(bench_eur)
+                if recompute_csvr:
+                    pred_csvr_s4.append(bench_eur)
                 pred_maml_s4.append(bench_eur)
         else:
+            pred_lasso_s4.append(bench_eur)
+            if recompute_csvr:
+                pred_csvr_s4.append(bench_eur)
             pred_maml_s4.append(bench_eur)
 
         if (i + 1) % 1000 == 0 or (i + 1) == n_total:
+
             np.savez(
                 checkpoint_path,
                 pred_lasso_s1=np.array(pred_lasso_s1, dtype=np.float32),
@@ -459,14 +504,15 @@ def run_zone_full4sets(zone: str, force_recompute_maml: bool = True):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--zone", type=str, default="all", choices=["all", "DE1", "DE2", "DE3", "DE4"])
-    parser.add_argument("--force", action="store_true", help="Force recomputing MAML from scratch")
+    parser.add_argument("--force", action="store_true", help="Force recomputing MAML and cSVR from scratch")
+    parser.add_argument("--recompute-csvr", action="store_true", default=True, help="Recompute cSVR and LASSO")
     args = parser.parse_args()
 
     target_zones = ZONES if args.zone == "all" else [args.zone]
     all_summaries = []
 
     for z in target_zones:
-        summary = run_zone_full4sets(z, force_recompute_maml=args.force)
+        summary = run_zone_full4sets(z, force_recompute_maml=args.force, recompute_csvr=args.recompute_csvr or args.force)
         all_summaries.append(summary)
 
     df_summary = pd.DataFrame(all_summaries)

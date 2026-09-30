@@ -25,7 +25,7 @@ os.makedirs(RESULTS_DIR, exist_ok=True)
 # ==============================================================================
 # DATA CONFIGURATION
 # ==============================================================================
-SCENARIO       = "scenario1"          # Feature scenario to use (from features.csv)
+SCENARIO       = "S1"                 # Feature scenario to use (from features.csv)
 ZONES          = ["DE1", "DE2", "DE3", "DE4"]
 N_QH           = 96                   # Number of quarter-hour positions per day
 
