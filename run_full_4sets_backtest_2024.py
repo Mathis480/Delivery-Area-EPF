@@ -162,9 +162,10 @@ def run_zone_full4sets(zone: str, force_recompute_maml: bool = True, recompute_c
                 lin_i1 = m_l1.intercept_ if MAML_USE_LINEAR_BYPASS else 0.0
 
                 if recompute_csvr:
-                    m_c1 = train_csvr(w1.X_trainval, w1.y_trainval, bm_trainval=w1.bm_trainval)
-                    p_c1_scaled = float(predict_csvr(m_c1, w1.X_test)[0])
-                    pred_csvr_s1.append(_backtransform(p_c1_scaled, w1.y_mean, w1.y_std, bench_eur))
+                    w1_c = loader.get_window(zone, q, d_str, feature_set=FEATURE_SET_MACRO, lookback_days=LOOKBACK_DAYS, val_days=VAL_DAYS, filter_zero_var=True, filter_corr=True, corr_threshold=0.80)
+                    m_c1 = train_csvr(w1_c.X_trainval, w1_c.y_trainval, bm_trainval=w1_c.bm_trainval)
+                    p_c1_scaled = float(predict_csvr(m_c1, w1_c.X_test, bm_test=bench_eur)[0])
+                    pred_csvr_s1.append(_backtransform(p_c1_scaled, w1_c.y_mean, w1_c.y_std, bench_eur))
 
                 p_maml_scaled1 = maml_s1.adapt_and_predict(
                     qh_idx=q,
@@ -204,9 +205,10 @@ def run_zone_full4sets(zone: str, force_recompute_maml: bool = True, recompute_c
                 lin_i2 = m_l2.intercept_ if MAML_USE_LINEAR_BYPASS else 0.0
 
                 if recompute_csvr:
-                    m_c2 = train_csvr(w2.X_trainval, w2.y_trainval, bm_trainval=w2.bm_trainval)
-                    p_c2_scaled = float(predict_csvr(m_c2, w2.X_test)[0])
-                    pred_csvr_s2.append(_backtransform(p_c2_scaled, w2.y_mean, w2.y_std, bench_eur))
+                    w2_c = loader.get_window(zone, q, d_str, feature_set=FEATURE_SET_NEIGHBOR, lookback_days=LOOKBACK_DAYS, val_days=VAL_DAYS, filter_zero_var=True, filter_corr=True, corr_threshold=0.95)
+                    m_c2 = train_csvr(w2_c.X_trainval, w2_c.y_trainval, bm_trainval=w2_c.bm_trainval)
+                    p_c2_scaled = float(predict_csvr(m_c2, w2_c.X_test, bm_test=bench_eur)[0])
+                    pred_csvr_s2.append(_backtransform(p_c2_scaled, w2_c.y_mean, w2_c.y_std, bench_eur))
 
                 p_maml_scaled2 = maml_s2.adapt_and_predict(
                     qh_idx=q,
@@ -246,9 +248,10 @@ def run_zone_full4sets(zone: str, force_recompute_maml: bool = True, recompute_c
                 lin_i3 = m_l3.intercept_ if MAML_USE_LINEAR_BYPASS else 0.0
 
                 if recompute_csvr:
-                    m_c3 = train_csvr(w3.X_trainval, w3.y_trainval, bm_trainval=w3.bm_trainval)
-                    p_c3_scaled = float(predict_csvr(m_c3, w3.X_test)[0])
-                    pred_csvr_s3.append(_backtransform(p_c3_scaled, w3.y_mean, w3.y_std, bench_eur))
+                    w3_c = loader.get_window(zone, q, d_str, feature_set=FEATURE_SET_FUNDAMENTAL, lookback_days=LOOKBACK_DAYS, val_days=VAL_DAYS, filter_zero_var=True, filter_corr=False)
+                    m_c3 = train_csvr(w3_c.X_trainval, w3_c.y_trainval, bm_trainval=w3_c.bm_trainval)
+                    p_c3_scaled = float(predict_csvr(m_c3, w3_c.X_test, bm_test=bench_eur)[0])
+                    pred_csvr_s3.append(_backtransform(p_c3_scaled, w3_c.y_mean, w3_c.y_std, bench_eur))
 
                 p_maml_scaled3 = maml_s3.adapt_and_predict(
                     qh_idx=q,
@@ -288,9 +291,10 @@ def run_zone_full4sets(zone: str, force_recompute_maml: bool = True, recompute_c
                 lin_i4 = m_l4.intercept_ if MAML_USE_LINEAR_BYPASS else 0.0
 
                 if recompute_csvr:
-                    m_c4 = train_csvr(w4.X_trainval, w4.y_trainval, bm_trainval=w4.bm_trainval)
-                    p_c4_scaled = float(predict_csvr(m_c4, w4.X_test)[0])
-                    pred_csvr_s4.append(_backtransform(p_c4_scaled, w4.y_mean, w4.y_std, bench_eur))
+                    w4_c = loader.get_window(zone, q, d_str, feature_set=FEATURE_SET_BALANCE, lookback_days=LOOKBACK_DAYS, val_days=VAL_DAYS, filter_zero_var=True, filter_corr=False)
+                    m_c4 = train_csvr(w4_c.X_trainval, w4_c.y_trainval, bm_trainval=w4_c.bm_trainval)
+                    p_c4_scaled = float(predict_csvr(m_c4, w4_c.X_test, bm_test=bench_eur)[0])
+                    pred_csvr_s4.append(_backtransform(p_c4_scaled, w4_c.y_mean, w4_c.y_std, bench_eur))
 
                 p_maml_scaled4 = maml_s4.adapt_and_predict(
                     qh_idx=q,
@@ -511,15 +515,36 @@ def main():
     target_zones = ZONES if args.zone == "all" else [args.zone]
     all_summaries = []
 
-    for z in target_zones:
-        summary = run_zone_full4sets(z, force_recompute_maml=args.force, recompute_csvr=args.recompute_csvr or args.force)
-        all_summaries.append(summary)
+    if len(target_zones) > 1:
+        import concurrent.futures
+        print(f"\n=======================================================")
+        print(f"   PARALLEL EXECUTION: Launching {len(target_zones)} zones ({', '.join(target_zones)})")
+        print(f"=======================================================")
+        with concurrent.futures.ProcessPoolExecutor(max_workers=len(target_zones)) as executor:
+            futures = {
+                executor.submit(run_zone_full4sets, z, args.force, args.recompute_csvr or args.force): z
+                for z in target_zones
+            }
+            for fut in concurrent.futures.as_completed(futures):
+                z = futures[fut]
+                try:
+                    summary = fut.result()
+                    all_summaries.append(summary)
+                    print(f"\n[DONE] Zone {z} finished successfully.")
+                except Exception as e:
+                    print(f"\n[ERROR] Zone {z} failed: {e}")
+                    import traceback
+                    traceback.print_exc()
+    else:
+        for z in target_zones:
+            summary = run_zone_full4sets(z, force_recompute_maml=args.force, recompute_csvr=args.recompute_csvr or args.force)
+            all_summaries.append(summary)
 
     df_summary = pd.DataFrame(all_summaries)
     summary_csv = os.path.join(RESULTS_DIR, "annual_run_2024", "full_4sets_summary_metrics_2024.csv")
     df_summary.to_csv(summary_csv, index=False)
     print("\n=======================================================")
-    print("      ALL 4 ZONES COMPLETED - FINAL SUMMARY TABLE      ")
+    print("      ALL ZONES COMPLETED - FINAL SUMMARY TABLE      ")
     print("=======================================================")
     print(df_summary.to_string(index=False))
 

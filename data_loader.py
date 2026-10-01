@@ -132,10 +132,10 @@ class QHDataLoader:
         df["Date"] = pd.to_datetime(df["Date"], utc=True)
         df = df.sort_values("Date").reset_index(drop=True)
 
-        # Retain only features present in parquet
+        # Retain only features present in parquet (strictly purging target columns and Date at runtime)
         available_cols = set(df.columns)
         self._zone_features: dict[str, list[str]] = {
-            z: [c for c in cols if c in available_cols]
+            z: [c for c in cols if c in available_cols and c not in {"Date", "VWAP_0to30", TARGET_COL_PATTERN.format(zone=z)} and not c.endswith("VWAP_0to30")]
             for z, cols in self._zone_feature_map.items()
         }
         self._shift_cols = [c for c in raw_shift_cols if c in available_cols]
@@ -240,15 +240,28 @@ class QHDataLoader:
                         if any(col.endswith(f"_{w}") for w in safe_bal_windows):
                             self._balance_features[zone].append(col)
 
-            # Set 1 (Macro)
+            # Set 1 (Macro) — strictly purge national and regional VWAP_0to30 targets
             if "S1" in feat_df.columns:
                 s1_cols = feat_df.loc[mask_z & feat_df["S1"].astype(str).str.strip().str.lower().isin(["x", "s1"]), "name"].str.strip().tolist()
-                self._s1_features[zone] = [c for c in s1_cols if c in available_cols and c != target_col]
+                self._s1_features[zone] = [
+                    c for c in s1_cols 
+                    if c in available_cols 
+                    and c not in {target_col, "VWAP_0to30", "Date"} 
+                    and not c.endswith("VWAP_0to30") 
+                    and not c.endswith("VWAP_0to15") 
+                    and not c.endswith("VWAP_15to30")
+                ]
 
             # Set 3 (Fundamental)
             if "S3" in feat_df.columns:
                 s3_raw = feat_df.loc[mask_z & feat_df["S3"].astype(str).str.strip().str.lower().isin(["x", "s3"]), "name"].str.strip().tolist()
-                fund_cols = [c for c in s3_raw if c in available_cols and c != target_col and c != bench]
+                fund_cols = [
+                    c for c in s3_raw 
+                    if c in available_cols 
+                    and c not in {target_col, "VWAP_0to30", "Date"} 
+                    and c != bench 
+                    and not c.endswith("VWAP_0to30")
+                ]
                 if bench in available_cols:
                     fund_cols = [bench] + fund_cols
                 self._s3_features[zone] = fund_cols
