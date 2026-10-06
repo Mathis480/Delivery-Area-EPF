@@ -362,24 +362,24 @@ def get_zone_summary(zone: str) -> dict:
     return summary
 
 def print_master_table(summaries: list[dict]):
-    print(f"\n{'='*98}")
-    print(f"             MASTER BENCHMARK: ALL MODELS & SCENARIOS (4 GERMAN DELIVERY AREAS 2024)")
-    print(f"{'='*98}")
-    print(f"  {'Model / Scenario':46s} | {'DE1':>9s} | {'DE2':>9s} | {'DE3':>9s} | {'DE4':>9s} | {'Average':>9s}")
-    print(f"  {'-'*96}")
+    print(f"\n{'='*104}")
+    print(f"               MASTER BENCHMARK: ALL MODELS & SCENARIOS (4 GERMAN DELIVERY AREAS 2024)")
+    print(f"{'='*104}")
+    print(f"  {'Model / Scenario':50s} | {'DE1':>9s} | {'DE2':>9s} | {'DE3':>9s} | {'DE4':>9s} | {'Average':>9s}")
+    print(f"  {'-'*102}")
 
     models = [
         ("Naive Benchmark (VWAP_90to105)", "naive"),
         ("Scenario 1: Standard LASSO", "lasso_std"),
         ("Scenario 2: Pure cSVR Ensemble", "csvr_pure"),
-        ("Scenario 3: MAMLNN (Ridge-Bypass, m=0.15)", "maml_byp_m015"),
-        ("Scenario 4: MAMLNN (Standard, Seed 42)", "maml_nobypass_single"),
-        ("Scenario 5: MAMLNN (Standard, 3-Seed Ensemble)", "maml_nobypass_deep"),
+        ("Scenario 3: MAML-NN (Linear Bypass, m=0.15)", "maml_byp_m015"),
+        ("Scenario 4: Pure MAML-NN (Single Seed 42)", "maml_nobypass_single"),
+        ("Scenario 5: Pure MAML-NN (Deep Ensemble, 3 Seeds)", "maml_nobypass_deep"),
     ]
 
     for label, key in models:
         vals = []
-        row = f"  {label:46s}"
+        row = f"  {label:50s}"
         for s in summaries:
             v = s.get(key, np.nan)
             vals.append(v)
@@ -388,7 +388,7 @@ def print_master_table(summaries: list[dict]):
         row += f" | {mean_v:9.4f}" if not np.isnan(mean_v) else f" | {'—':>9s}"
         print(row)
 
-    print(f"  {'-'*96}\n")
+    print(f"  {'-'*102}\n")
 
 # Main Orchestrator
 def main():

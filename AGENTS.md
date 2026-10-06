@@ -12,6 +12,13 @@
 * **Marcjasz et al. (2020, *Energies* / `old/energies-13-01667-2.pdf`):** Simple 50:50 arithmetic average with Naive ($\text{ens} = 0.5\hat{y} + 0.5y_{\text{naive}}$, Eq. 15).
 * **Puć & Janczura (2024, IJF / `old/2411.16237v1.pdf`):** linear inverse-MAE rolling weighting ($p=1.0$, Eq. 25 & `intel_avg_generator.py`).
 
+## 1.2 Formula Rendering Policy (Chat Readability Standard)
+* **No Raw LaTeX in Chat:** Never output unrendered LaTeX math tags (`$...$` or `$$...$$`) in chat responses, as the IDE markdown renderer does not parse them into math.
+* **Standard Representation:**
+  1. **Rendered Formula Images (Primary):** Render non-trivial equations on-the-fly as crisp PNG images via Python (`matplotlib`, `dpi=250`, `facecolor='white'`) into the scratch/artifacts folder and embed them via `![caption](file:///path/to/image.png)`.
+  2. **Margin & Padding Rule:** Always set balanced margins (`pad_inches=0.15`, `bbox_inches='tight'`) so that indices, superscripts, and fractions are never cropped or touching the borders.
+  3. **GitHub Math Blocks (Secondary / Fallback):** For short expressions, use standard fenced ````math ```` blocks.
+
 ## 2. Core Methodological Rules
 
 ### 2.1 Time Series Grid & UTC Base

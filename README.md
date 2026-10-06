@@ -96,12 +96,14 @@ with historical calibration window $W = 14$ days. In accordance with experimenta
 Delivery-Area-EPF/
 ├── AGENTS.md                          # Workspace rules, TSO mapping & benchmark ground truth
 ├── README.md                          # Methodology, architecture & reproduction guide
+├── requirements.txt                   # Project dependencies and exact versions
 ├── config.py                          # Central configuration and hyperparameters
 ├── features.csv                       # Feature catalog (910 variable definitions)
 ├── data_loader.py                     # Rolling QH data loader with ex-ante shifting & scaling
 │
 ├── Data/
 │   ├── master_dataset.parquet         # Master dataset (114,060 x 936 float32 columns)
+│   ├── master_dataset_2021_2024.csv   # Universal CSV dataset archive
 │   └── [Raw Auction & Market Directories]
 │
 ├── Models/
@@ -111,7 +113,7 @@ Delivery-Area-EPF/
 │   ├── maml_nn.py                     # MAML-NN engine with fast compiled inner adaptation
 │   └── ensemble.py                    # Rolling inverse-MAE weighted forecast averaging
 │
-├── run_master_benchmark_2024.py       # Unified master runner across all 4 zones & feature sets (S1-S4)
+├── run_experiment.py                  # Central simulation engine (rolling backtest across DE1-DE4)
 │
 ├── Evaluation/
 │   ├── run_full4sets_evaluation.py    # 15-minute QH curves and rMAE heatmaps generator
@@ -128,22 +130,40 @@ Delivery-Area-EPF/
 
 ## 6. Reproduction & Execution
 
-### 1. Run Unified Master Benchmark (All 4 Zones, 2024 Full Year):
-```bash
-python run_master_benchmark_2024.py
-# To retrain backbones and recompute from scratch:
-python run_master_benchmark_2024.py --force
-```
+The experiment follows a three-stage workflow:
 
-### 2. Generate Master Heatmaps & Visualizations:
+### Step 1: Data Preparation (One-time or upon raw data updates)
+Execute the data integration notebook:
+* **Notebook:** [`create_master_dataset.ipynb`](create_master_dataset.ipynb)
+* **Description:** Reads raw market data (EPEX Intraday Continuous, DA/ID auctions, balancing energy, fundamentals), aligns timestamps to pure UTC and a 15-minute unbroken grid, and exports:
+  1. `Data/master_dataset_2021_2024.csv`
+  2. `Data/master_dataset.parquet`
+
+### Step 2: Model Simulation & Experiment (Core Execution)
+Run the out-of-sample backtest across all 96 quarter-hourly contracts and German delivery areas (DE1–DE4):
+```bash
+# Standard run (resumes automatically from checkpoints if interrupted):
+python run_experiment.py
+
+# Force full re-training and re-computation from scratch:
+python run_experiment.py --force
+
+# Display only the consolidated summary metrics table of existing runs:
+python run_experiment.py --summary_only
+```
+* **Execution Details:**
+  * Pretrains shared MAML-NN backbones across multiple random seeds (`[42, 123, 999]`).
+  * Executes the rolling 822-day training lookback with 30-day validation windows for daily adaptation.
+  * Fits Naive, Standard LASSO, Pure cSVR (S1–S4), and Pure MAML-NN (S1–S4).
+  * Computes rolling 14-day inverse-MAE ensemble combinations and Diebold-Mariano tests.
+  * Saves all predictions and metrics compressed under `Results/annual_run_2024/`.
+
+### Step 3: Scientific Evaluation & Plot Generation
+Generate the final publication-ready figures:
 ```bash
 python Evaluation/run_full4sets_evaluation.py
 ```
-
-### 3. Display Master Benchmark Summary Table:
-```bash
-python run_master_benchmark_2024.py --summary_only
-```
+* **Output:** Generates intraday MAE curves (all 96 QH intervals) and hourly rMAE heatmaps under `Evaluation/plots/`.
 
 ---
 
@@ -151,15 +171,15 @@ python run_master_benchmark_2024.py --summary_only
 
 Evaluation over all 35,132 continuous quarter-hours of calendar year 2024:
 
-| Model / Scenario | DE1 | DE2 (Amprion) | DE3 | DE4 | **Average** | Status / Rank |
+| Model / Configuration | DE1 | DE2 (Amprion) | DE3 | DE4 | **Average** | Specification / Description |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **Naive Benchmark** (`VWAP_90to105`) | 26.2815 | 26.6818 | 27.2725 | 27.2536 | **26.8724** | Ground Truth Baseline |
-| **Scenario 1: Standard LASSO** | 26.6733 | 27.2058 | 27.9223 | 27.8579 | **27.4148** | Linear Reference |
-| **Scenario 2: Pure cSVR Ensemble (with Corr Filter)** | 25.9016 | 26.2367 | 26.9297 | 26.7828 | **26.4627** | Puć (2024) Standard |
-| **Scenario 2b: Pure cSVR Ensemble (No Corr Filter)** | — | **26.2044** | — | — | — | Statistically Superior ($p < 0.0001$) |
-| **Scenario 3: Old MAML (Ridge-Bypass $m=0.15$)** | 25.9000 | 26.2781 | 26.9485 | 26.8383 | **26.4912** | Prior Linear Hybrid Baseline |
-| **Scenario 4: Pure MAML-NN (Single-Seed 42)** | 25.8966 | 26.1320 | 26.8130 | 26.7340 | **26.3939** | Strong Baseline |
-| **Scenario 5: Pure MAML-NN (Deep Ensemble 3-Seed)** | **25.8694** | **26.1121** | **26.7704** | **26.7068** | **26.3647** | 🏆 **Global Winner** |
+| **Naive Benchmark** (`VWAP_90to105`) | 26.2815 | 26.6818 | 27.2725 | 27.2536 | **26.8724** | Persistent Baseline |
+| **Scenario 1: Standard LASSO** | 26.6733 | 27.2058 | 27.9223 | 27.8579 | **27.4148** | Linear L1 Regularization (Marcjasz et al., 2020) |
+| **Scenario 2: Pure cSVR Ensemble (with Corr Filter)** | 25.9016 | 26.2367 | 26.9297 | 26.7828 | **26.4627** | Puć & Janczura (2024) Standard Configuration |
+| **Scenario 2b: Pure cSVR Ensemble (No Corr Filter)** | — | **26.2044** | — | — | — | Full Feature Retention (Ablation, $p < 0.0001$) |
+| **Scenario 3: MAML-NN with Linear Bypass ($m=0.15$)** | 25.9000 | 26.2781 | 26.9485 | 26.8383 | **26.4912** | Hybrid Meta-Learning Baseline |
+| **Scenario 4: Pure MAML-NN (Single Seed 42)** | 25.8966 | 26.1320 | 26.8130 | 26.7340 | **26.3939** | End-to-End Deep Meta-Learning Architecture |
+| **Scenario 5: Pure MAML-NN (Deep Ensemble, 3 Seeds)** | **25.8694** | **26.1121** | **26.7704** | **26.7068** | **26.3647** | Deep Ensemble (Variance-Reduced, Lowest MAE) |
 
 ---
 

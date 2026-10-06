@@ -65,6 +65,7 @@ Thumbs.db
 !.gitignore
 !features.csv
 !features.yaml
+!requirements.txt
 
 # Archived & Scratch directories (experimental code, not synced via git)
 old/

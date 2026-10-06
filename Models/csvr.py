@@ -6,19 +6,15 @@ Theoretical Foundation:
 Following Puć & Janczura (2024, Eq. 12; arXiv:2411.16237v1) and their official replication
 repository (https://github.com/pucandrzej/replication_cSVR/tree/main/Forecasting):
 
-0. **Correlation-Based Feature Filtering (Puć & Janczura 2024, Sec. 2.2):**
-   Prior to kernel evaluation and model training, collinear variables are pruned
-   strictly ex-ante on the rolling training set (via `np.corrcoef` on X_train):
-   - S1 (Macro): |r| >= 0.80 (broad price information, heavily pruned).
-   - S2 (Neighbor): |r| >= 0.95 (conservative threshold to preserve limited neighbor signals).
+0. Correlation-Based Feature Filtering (Puć & Janczura 2024, Sec. 2.2):
+   -> can be toggled on and off via CSVR_USE_CORR_FILTER in config.py (default: True)
 
-1. **Feature Distance (Laplace Kernel):**
-   Pairwise Euclidean distances d_X(x_i, x_j) = ||x_i - x_j||_2 are computed on standardized
-   and filtered features. The Laplace kernel width is set via quantile heuristics:
+1. Feature Distance (Laplace Kernel):
+   Pairwise Euclidean distances are computed on standardized and filtered features. The Laplace kernel width is set via quantile heuristics:
        l = log(2 - 2 * q_kernel) / quantile(d_X, q_data)
    with q_kernel = 0.75 and q_data = 0.50.
 
-2. **Naive Benchmark Gaussian Correction Kernel (Eq. 12):**
+2. Naive Benchmark Gaussian Correction Kernel (Eq. 12):
    To incorporate local elasticity and suppress leverage points (training samples with close
    features but distant prices), the Laplace kernel is multiplied by a Gaussian kernel
    on the standardized naive benchmark price:
@@ -27,7 +23,7 @@ repository (https://github.com/pucandrzej/replication_cSVR/tree/main/Forecasting
        sigma = quantile((P_i^naive - P_j^naive)^2, q_data_naive) / Phi^-1(q_kernel_naive)
    with q_data_naive = 0.75 and q_kernel_naive = 0.75.
 
-3. **Target Standardisation & Inversion:**
+3. Target Standardisation & Inversion:
    Target difference (y = VWAP_0to30 - VWAP_90to105) is standardized to zero mean and unit
    variance on the training set, allowing standard SVR parameters (C=1.0, epsilon=0.1)
    to operate on the normalized scale before inverse-transforming predictions.
@@ -184,7 +180,7 @@ def predict_csvr(
     y_pred_scaled : np.ndarray
         Predicted standardized price difference.
     """
-    # Apply same feature mask
+    # Apply zero variance filter
     X_filt = X_test[:, model.feature_mask]
 
     # Compute distance to training points
