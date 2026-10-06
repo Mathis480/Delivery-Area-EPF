@@ -6,6 +6,12 @@
 * **User Chat:** Match user's language (German/English).
 * **Code & Artifacts:** Strictly English (code, documentation, comments, commit messages).
 
+## 1.1 Literature Ground Truth & Knowledge Base
+* Before citing papers, formulas, or ensemble schemes, **always consult the immutable knowledge base:** [`old/LITERATURE_KNOWLEDGE_BASE.md`](old/LITERATURE_KNOWLEDGE_BASE.md).
+* **Marcjasz et al. (2018, *Energies* / `old/energies-11-02364.pdf`):** Origin of inverse-MAE window weighting ($w \propto 1/\text{MAE}$, Eq. 5).
+* **Marcjasz et al. (2020, *Energies* / `old/energies-13-01667-2.pdf`):** Simple 50:50 arithmetic average with Naive ($\text{ens} = 0.5\hat{y} + 0.5y_{\text{naive}}$, Eq. 15).
+* **Puć & Janczura (2024, IJF / `old/2411.16237v1.pdf`):** linear inverse-MAE rolling weighting ($p=1.0$, Eq. 25 & `intel_avg_generator.py`).
+
 ## 2. Core Methodological Rules
 
 ### 2.1 Time Series Grid & UTC Base

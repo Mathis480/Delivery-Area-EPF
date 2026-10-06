@@ -442,12 +442,14 @@ class TestFeatureSetPartitioning(unittest.TestCase):
             self.assertNotIn("_vs_DE_nb_", c, f"S1 contains cross-zone neighbor: {c}")
 
     def test_s3_contains_fundamentals(self):
-        """Set 3 must contain load/solar/wind/calendar features."""
+        """Set 3 must contain load/solar/wind/calendar and cross-border features."""
         from config import FEATURE_SET_FUNDAMENTAL
-        cols = self.loader.feature_names("DE2", feature_set=FEATURE_SET_FUNDAMENTAL)
+        for z in ["DE1", "DE2", "DE3", "DE4"]:
+            cols = self.loader.feature_names(z, feature_set=FEATURE_SET_FUNDAMENTAL)
+            self.assertIn("DE_cross_border_trading", cols, f"DE_cross_border_trading missing from S3 in {z}")
         keywords_found = set()
         for c in cols:
-            for kw in ("load", "solar", "wind", "Weekday", "prediction_error"):
+            for kw in ("load", "solar", "wind", "Weekday", "prediction_error", "cross_border"):
                 if kw in c:
                     keywords_found.add(kw)
         self.assertGreater(len(keywords_found), 0,
@@ -605,6 +607,20 @@ class TestModelAPIContracts(unittest.TestCase):
         coef, intercept = get_lr_weights(model)
         self.assertEqual(coef.shape, (5,))
 
+    def test_maml_adapt_and_predict(self):
+        """MAML adapt_and_predict interface test with synthetic support/test sets."""
+        from Models.maml_nn import MAMLManager
+        np.random.seed(42)
+        n_feat = 10
+        mgr = MAMLManager(zone="DE2", n_features=n_feat, feature_set="s1", seed=42)
+        mgr.set_backbone_weights(mgr._working_model.get_weights())
+        X_supp = np.random.randn(50, n_feat).astype(np.float32)
+        y_supp = np.random.randn(50).astype(np.float32)
+        X_test = np.random.randn(n_feat).astype(np.float32)
+        pred = mgr.adapt_and_predict(X_support=X_supp, y_support=y_supp, X_test=X_test)
+        self.assertIsInstance(pred, float)
+        self.assertFalse(np.isnan(pred))
+
     def test_init_exports_all(self):
         """Models.__init__ must export all documented functions."""
         from Models import (
@@ -619,6 +635,7 @@ class TestModelAPIContracts(unittest.TestCase):
         self.assertTrue(callable(train_csvr))
         self.assertTrue(callable(predict_csvr))
         self.assertTrue(callable(compute_rolling_weighted_average))
+        self.assertTrue(callable(build_maml_net))
 
 
 # ============================================================================

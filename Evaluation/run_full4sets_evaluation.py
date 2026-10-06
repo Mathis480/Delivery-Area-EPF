@@ -3,7 +3,7 @@
 #%%
 """
 4-Feature-Set Evaluation
-  1. Hour-by-hour rMAE plots for each zone comparing sets and ensembles.
+  1. rMAE plots for each zone comparing sets and ensembles.
   2. Multi-model rMAE heatmaps across the 24 hours (96 QH) of the trading day.
   3. Diebold-Mariano significance matrix heatmaps.
 
@@ -55,18 +55,14 @@ def generate_zone_plots(zone: str):
     # Strictly MAML-NN vs cSVR (Rule 5.2: No cross-architecture hybrids)
     models_to_eval = [
         ("Naive Benchmark", bm_2d),
-        ("cSVR (S1 Macro)", data["pred_csvr_s1_2d"] if "pred_csvr_s1_2d" in data else data["pred_csvr_2d"]),
-        ("MAML (S1 Macro)", data["pred_maml_s1_2d"]),
+        ("Standard LASSO", data["pred_lasso_ens_pure_2d"] if "pred_lasso_ens_pure_2d" in data else data["pred_lasso_2d"]),
         ("cSVR (S2 Neighbor)", data["pred_csvr_s2_2d"]),
-        ("MAML (S2 Neighbor)", data["pred_maml_s2_2d"]),
-        ("cSVR (S3 Fundamentals)", data["pred_csvr_s3_2d"]),
-        ("MAML (S3 Fundamentals)", data["pred_maml_s3_2d"]),
-        ("cSVR (S4 Balances)", data["pred_csvr_s4_2d"]),
-        ("MAML (S4 Balances)", data["pred_maml_s4_2d"]),
         ("Pure cSVR Ens (S1-S4)", data["pred_csvr_ens_pure_2d"]),
-        ("Pure MAML Ens (S1-S4)", data["pred_maml_ens_pure_2d"]),
         ("cSVR Ens (+Naive)", data["pred_csvr_ens_wn_2d"]),
-        ("MAML Ens (+Naive)", data["pred_maml_ens_wn_2d"]),
+        ("MAML (Bypass m=0.15)", data["pred_maml_ens_pure_2d"]),
+        ("Pure MAML Single (S1-S4)", data["pred_maml_nobypass_ens_pure_2d"] if "pred_maml_nobypass_ens_pure_2d" in data else data["pred_maml_ens_pure_2d"]),
+        ("Pure MAML Deep Ens (3-Seed)", data["pred_maml_nobypass_deep_ens_pure_2d"] if "pred_maml_nobypass_deep_ens_pure_2d" in data else data["pred_maml_nobypass_ens_pure_2d"]),
+        ("Pure MAML Deep (+Naive)", data["pred_maml_nobypass_deep_ens_wn_2d"] if "pred_maml_nobypass_deep_ens_wn_2d" in data else data["pred_maml_ens_wn_2d"]),
     ]
 
     # Compute 15-minute Quarter-Hour rMAE (96 intervals per day)
@@ -85,12 +81,14 @@ def generate_zone_plots(zone: str):
 
     # Color palette
     colors = {
+        "Weighted LASSO (1-SE)": ("#7f7f7f", ":", 1.8, None),
         "cSVR (S2 Neighbor)": ("#1f77b4", ":", 1.8, None),
-        "MAML (S2 Neighbor)": ("#ff7f0e", ":", 2.0, None),
-        "Pure cSVR Ens (S1-S4)": ("#2ca02c", "-", 2.5, "o"),
-        "Pure MAML Ens (S1-S4)": ("#d62728", "-", 2.5, "s"),
-        "cSVR Ens (+Naive)": ("#9467bd", "--", 2.0, "^"),
-        "MAML Ens (+Naive)": ("#e377c2", "--", 2.0, "v"),
+        "Pure cSVR Ens (S1-S4)": ("#2ca02c", "-", 2.2, "o"),
+        "cSVR Ens (+Naive)": ("#9467bd", "--", 1.8, "^"),
+        "MAML OptLASSO Ens": ("#ff7f0e", "--", 2.0, "v"),
+        "Pure MAML Single (S1-S4)": ("#d62728", "-.", 2.2, "s"),
+        "Pure MAML Deep Ens (3-Seed)": ("#e377c2", "-", 2.8, "D"),
+        "Pure MAML Deep (+Naive)": ("#8c564b", "--", 2.0, "*"),
     }
 
     for name, (col, ls, lw, marker) in colors.items():

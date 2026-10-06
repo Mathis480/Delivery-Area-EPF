@@ -1,9 +1,16 @@
 """
 Rolling Weighted Forecast Averaging Ensemble Generator.
-Adapts the weighted forecast averaging methodology of Puć & Janczura (2024, Eq. 25;
-implemented as 'intel_avg_generator.py' in their replication code) and Bates & Granger (1969)
-to combine multiple model forecasts and feature-set predictions with the naive benchmark
-using rolling ex-ante inverse-MAE weighting over a historical calibration window.
+
+Direct Methodological Foundation:
+1. Marcjasz, Serafin & Weron (2018, Energies 11(9), 2364):
+   Introduced the rolling inverse-MAE (1/MAE) window-weighting scheme for electricity prices:
+   w_j^W = (1 / MAE_j^W) / sum_k (1 / MAE_k^W).
+2. Puć & Janczura (2024, Eq. 25; arXiv:2411.16237v1 & 'intel_avg_generator.py'):
+   Adopted the inverse-MAE rolling scheme over calibration windows W in {7, 14, 21, 28} days
+   to average cSVR feature sets.
+3. Our implementation:
+   Vectorized 2D ex-ante rolling execution of Puć & Janczura's 'intel_avg_generator.py'
+   with calibration window W = 14 days and strictly linear inverse-MAE weighting (p = 1.0).
 """
 from typing import Dict, List, Optional, Tuple
 import numpy as np
@@ -14,8 +21,8 @@ def compute_rolling_weighted_average(
     predictions: Dict[str, np.ndarray],
     y_true_2d: np.ndarray,
     benchmark_2d: np.ndarray,
-    calib_window: int = 28,
-    power: float = 2.0,
+    calib_window: int = 14,
+    power: float = 1.0,
     warmup_weights: Optional[Dict[str, float]] = None,
     qh_adaptive: bool = False,
 ) -> Tuple[np.ndarray, pd.DataFrame, Dict[str, float]]:

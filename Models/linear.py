@@ -12,38 +12,26 @@ from typing import Optional
 
 import numpy as np
 from sklearn.linear_model import Lasso, LassoLarsCV, LinearRegression
-
 from config import LASSO_CV_DAYS, LASSO_MAX_ITER, LASSO_TOL, SCALERS_DIR, TRAINED_MODELS_DIR
-
 
 # ---------------------------------------------------------------------------
 # Ordinary Least Squares (LR)
 # ---------------------------------------------------------------------------
 
 def train_lr(X_trainval: np.ndarray, y_trainval: np.ndarray) -> LinearRegression:
-    """
-    Fit unregularized OLS on the combined train+val window.
-    """
     model = LinearRegression(fit_intercept=True, n_jobs=1)
     model.fit(X_trainval, y_trainval)
     return model
 
-
 def predict_lr(model: LinearRegression, X: np.ndarray) -> np.ndarray:
-    """Predict scaled price difference."""
     return model.predict(X)
 
-
 def get_lr_weights(model: LinearRegression) -> tuple[np.ndarray, float]:
-    """
-    Return (coef_, intercept_) from a fitted LinearRegression.
-    Used to initialize the MAML-NN linear bypass projection layer.
-    """
     return model.coef_.copy(), float(model.intercept_)
 
 
 # ---------------------------------------------------------------------------
-# LASSO (LassoLarsCV — matches replication_cSVR methodology)
+# LASSO (LassoLarsCV)
 # ---------------------------------------------------------------------------
 
 def _build_temporal_cv_splits(
@@ -54,7 +42,6 @@ def _build_temporal_cv_splits(
 
     Each fold uses all data before the test index as training.
     The last `cv_days` observations serve as individual holdout folds.
-    This mirrors the approach in replication_cSVR/forecasting_simulation.py.
     """
     splits = []
     for cv_test_idx in range(cv_days):
@@ -64,7 +51,6 @@ def _build_temporal_cv_splits(
         splits.append((train_indices, test_indices))
     return splits
 
-
 def train_lasso(
     X_trainval: np.ndarray,
     y_trainval: np.ndarray,
@@ -72,9 +58,6 @@ def train_lasso(
 ) -> tuple[Lasso, float]:
     """
     LASSO with LassoLarsCV alpha selection (recalibrated every call).
-
-    Alpha selection uses an expanding-window temporal CV over the last
-    LASSO_CV_DAYS days of the trainval window, following Marcjasz et al.
     The final model is fitted on the full trainval set with the selected alpha.
     """
     if alpha is not None:
@@ -122,16 +105,13 @@ def train_lasso(
 
     return final_model, best_alpha
 
-
 def predict_lasso(model: Lasso, X: np.ndarray) -> np.ndarray:
     """Predict scaled price difference."""
     return model.predict(X)
 
-
 def get_lasso_weights(model: Lasso) -> tuple[np.ndarray, float]:
     """Return (coef_, intercept_) from a fitted Lasso."""
     return model.coef_.copy(), float(model.intercept_)
-
 
 # ---------------------------------------------------------------------------
 # Model & Scaler persistence utilities
@@ -144,7 +124,6 @@ def save_scaler(scaler, zone: str, qh_idx: int, date_str: str, folder: str = SCA
     with open(filename, "wb") as f:
         pickle.dump(scaler, f)
     return filename
-
 
 def save_trained_model(model, name: str, zone: str, qh_idx: int, date_str: str, folder: str = TRAINED_MODELS_DIR) -> str:
     """Save fitted model object to Models/trained_models/."""
