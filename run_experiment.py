@@ -4,9 +4,21 @@ Out-of-sample 2024 benchmark across German delivery areas (DE1..DE4):
   - Pure cSVR Ensemble (Puć & Janczura, 2024)
   - Pure MAML-NN (Single Seed & Deep Ensemble)
 """
+#%%
 from __future__ import annotations
 import os
 import sys
+
+# Silence TensorFlow C++ & oneDNN informational logs before any imports
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
+import warnings
+warnings.filterwarnings("ignore")
+import logging
+logging.getLogger("tensorflow").setLevel(logging.ERROR)
+
 import multiprocessing
 import numpy as np
 from tqdm import tqdm
@@ -15,7 +27,7 @@ from config import (
     RESULTS_DIR, LOOKBACK_DAYS, VAL_DAYS, N_QH, ZONES,
     FEATURE_SET_MACRO, FEATURE_SET_NEIGHBOR,
     FEATURE_SET_FUNDAMENTAL, FEATURE_SET_BALANCE,
-    CSVR_USE_CORR_FILTER, CSVR_CORR_THRESH_S1, CSVR_CORR_THRESH_S2,
+    CSVR_CORR_THRESH_S1, CSVR_CORR_THRESH_S2,
     ENSEMBLE_CALIB_DAYS, ENSEMBLE_POWER, ENSEMBLE_QH_ADAPTIVE, MAML_SEEDS,
     N_WORKERS,
 )
@@ -24,9 +36,6 @@ from Models.linear import train_lasso, predict_lasso
 from Models.csvr import train_csvr, predict_csvr
 from Models.maml_nn import MAMLManager
 from Models.ensemble import compute_rolling_weighted_average, dm_test
-
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 TARGET_ZONES = ZONES  # ["DE1", "DE2", "DE3", "DE4"]
 
