@@ -1,7 +1,7 @@
 """
 MAML-NN (Model-Agnostic Meta-Learning Neural Network) for per-QH EPF Forecasting.
 Implements Model-Agnostic Meta-Learning (Finn et al., 2017) with warm-start backbone
-pre-training, linear bypass with smooth saturation, regime-based nearest-neighbor
+pre-training, optional linear bypass residual learning, regime-based nearest-neighbor
 support set sampling, and proximal soft-thresholding.
 """
 from __future__ import annotations
@@ -15,10 +15,6 @@ import numpy as np
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # Strictly CPU execution to avoid multi-process GPU conflicts
 import tensorflow as tf
-try:
-    tf.config.set_visible_devices([], "GPU")
-except Exception:
-    pass
 from tensorflow import keras
 from tensorflow.keras import layers, regularizers
 from scipy.spatial.distance import cdist
@@ -44,23 +40,12 @@ from config import (
     N_QH,
     TRAINED_MODELS_DIR,
     FEATURE_SET_MACRO,
-    FEATURE_SET_NEIGHBOR,
-    FEATURE_SET_FUNDAMENTAL,
-    FEATURE_SET_BALANCE,
 )
 
 warnings.filterwarnings("ignore")
 tf.random.set_seed(42)
 np.random.seed(42)
 
-
-# Feature sets definition
-FEATURE_SETS_ALL_FOUR = [
-    FEATURE_SET_MACRO,
-    FEATURE_SET_NEIGHBOR,
-    FEATURE_SET_FUNDAMENTAL,
-    FEATURE_SET_BALANCE,
-]
 
 def build_maml_net(
     n_features: int,
@@ -87,6 +72,7 @@ def build_maml_net(
     model.compile(optimizer=keras.optimizers.Adam(learning_rate=MAML_META_LR), loss=tf.keras.losses.MeanAbsoluteError())
     return model
 
+
 class MAMLManager:
     """Manages the shared MAML residual backbone and inner-loop adaptation."""
 
@@ -96,6 +82,7 @@ class MAMLManager:
         n_features: int,
         feature_set: str = FEATURE_SET_MACRO,
         seed: int = 42,
+        bypass_mode: Optional[str] = None,
     ):
         self.zone = zone
         self.n_features = n_features
@@ -103,7 +90,10 @@ class MAMLManager:
         self.seed = seed
         self.n_qh = N_QH
         self.use_linear_bypass = MAML_USE_LINEAR_BYPASS
-        self.bypass_mode = "nobypass"
+        if bypass_mode is not None:
+            self.bypass_mode = bypass_mode
+        else:
+            self.bypass_mode = "optlasso" if self.use_linear_bypass else "nobypass"
         self.hidden_sizes = MAML_HIDDEN_SIZES
         self.dropout = MAML_DROPOUT
         self.l1_reg = MAML_L1_REG
@@ -169,16 +159,12 @@ class MAMLManager:
         """Loads or trains the shared MAML backbone across QH positions with seed-specific checkpoint."""
         backbone_path = self._backbone_path(quarter_tag)
         if os.path.exists(backbone_path) and not force_retrain:
-            try:
-                with open(backbone_path, "rb") as f:
-                    self._backbone_weights = pickle.load(f)
-                self._working_model.set_weights(self._backbone_weights)
-                if verbose:
-                    print(f"[{self.zone} {self.feature_set} seed={self.seed}] Loaded cached backbone: {os.path.basename(backbone_path)}")
-                return
-            except ValueError:
-                if verbose:
-                    print(f"[{self.zone} {self.feature_set} seed={self.seed}] Cached backbone shape mismatch. Retraining...")
+            with open(backbone_path, "rb") as f:
+                self._backbone_weights = pickle.load(f)
+            self._working_model.set_weights(self._backbone_weights)
+            if verbose:
+                print(f"[{self.zone} {self.feature_set} seed={self.seed}] Loaded cached backbone: {os.path.basename(backbone_path)}")
+            return
 
         np.random.seed(self.seed)
         tf.random.set_seed(self.seed)
@@ -237,23 +223,14 @@ class MAMLManager:
     def adapt_and_predict(
         self,
         X_support: np.ndarray,
-        y_support: np.ndarray = None,
-        X_test: np.ndarray = None,
-        qh_idx: int = 0,
-        **kwargs,
+        y_support: np.ndarray,
+        X_test: np.ndarray,
     ) -> float:
         """Fast compiled inner-loop adaptation starting from warm-start backbone.
 
         Resets model to shared backbone, selects regime-nearest support days,
         and executes compiled gradient adaptation.
         """
-        # Support legacy positional interface (qh_idx, X_support, y_support, X_test)
-        if isinstance(X_support, (int, np.integer)):
-            qh_idx = int(X_support)
-            X_support = y_support
-            y_support = X_test
-            X_test = kwargs.get("X_test")
-
         if self._backbone_weights is None:
             raise RuntimeError(f"[MAML {self.zone}] Shared backbone not initialized.")
 
@@ -269,7 +246,7 @@ class MAMLManager:
         x_te = tf.cast(X_test.reshape(1, -1), tf.float32)
         pred = float(self._run_inner_loop_graph(X_s, y_s, x_te, lr_t, prox_t, weights_s).numpy().ravel()[0])
 
-        # 4. Optional residual clipping
+        # 4. Optional residual clipping if configured
         if MAML_CLIP_RESIDUAL is not None and MAML_CLIP_RESIDUAL > 0:
             pred = float(np.clip(pred, -MAML_CLIP_RESIDUAL, MAML_CLIP_RESIDUAL))
 
@@ -285,36 +262,19 @@ class MAMLManager:
         prox_shrink: tf.Tensor,
         weights: tf.Tensor,
     ) -> tf.Tensor:
-        """
-        Compiled TensorFlow graph executing inner-loop SGD adaptation and out-of-sample prediction.
-
-        Workflow per test interval:
-          1. Inner gradient descent: For N steps, evaluate weighted MAE on support set.
-          2. Gradient clipping: Clip global norm to 1.0 for numerical stability.
-          3. Fast Stochastic Gradient Descent (SGD) step: theta <- theta - lr * grad.
-          4. Proximal operator: Soft-thresholding (L1 shrinkage) to prevent few-shot overfitting.
-          5. Inference: Forward pass through adapted network on query feature vector xte.
-        """
+        """Compiled TensorFlow graph executing inner-loop SGD adaptation and out-of-sample prediction."""
         for _ in range(MAML_INNER_STEPS):
             with tf.GradientTape() as tape:
-                # 1. Forward pass on support set
                 pred = self._working_model(xs, training=True)
-                # 2. Weighted MAE loss (weighted by soft-kernel regime similarity)
                 loss = tf.reduce_sum(weights * tf.abs(rs - pred))
 
-            # 3. Compute gradients w.r.t. trainable parameters
             grads = tape.gradient(loss, self._variables)
-            # 4. Clip gradient norm to prevent exploding gradients during rapid fine-tuning
             grads, _ = tf.clip_by_global_norm(grads, 1.0)
 
-            # 5. Apply gradient descent step and proximal soft-thresholding
             for v, g in zip(self._variables, grads):
                 if g is not None:
-                    # Fast SGD update: theta <- theta - lr * grad
                     v.assign_sub(lr * g)
-                    # Proximal L1 shrinkage: sign(v) * max(0, |v| - prox_shrink)
                     if prox_shrink > 0.0:
                         v.assign(tf.sign(v) * tf.maximum(0.0, tf.abs(v) - prox_shrink))
 
-        # 6. Predict out-of-sample delivery interval using adapted model weights
         return self._working_model(xte, training=False)

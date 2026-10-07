@@ -34,15 +34,9 @@ ZONE_NAMES = {
     "DE4": "50Hertz (DE4)",
 }
 
-def dm_test(actual, pred1, pred2):
-    e1 = np.abs(actual - pred1)
-    e2 = np.abs(actual - pred2)
-    d = e1 - e2
-    mean_d = np.mean(d)
-    var_d = np.var(d, ddof=1)
-    stat = mean_d / np.sqrt(var_d / len(d))
-    p_val = 2 * (1 - stats.norm.cdf(np.abs(stat)))
-    return stat, p_val
+if PROJECT_DIR not in sys.path:
+    sys.path.insert(0, PROJECT_DIR)
+from Models.ensemble import dm_test
 
 def generate_zone_plots(zone: str):
     npz_path = os.path.join(RESULTS_DIR, f"results_{zone}_full4sets_2024.npz")
@@ -58,12 +52,16 @@ def generate_zone_plots(zone: str):
         ("Standard LASSO", data["pred_lasso_ens_pure_2d"] if "pred_lasso_ens_pure_2d" in data else data["pred_lasso_2d"]),
         ("cSVR (S2 Neighbor)", data["pred_csvr_s2_2d"]),
         ("Pure cSVR Ens (S1-S4)", data["pred_csvr_ens_pure_2d"]),
+    ]
+    if "pred_csvr_nocorr_ens_pure_2d" in data:
+        models_to_eval.append(("Pure cSVR (No Corr)", data["pred_csvr_nocorr_ens_pure_2d"]))
+    models_to_eval.extend([
         ("cSVR Ens (+Naive)", data["pred_csvr_ens_wn_2d"]),
         ("MAML (Bypass m=0.15)", data["pred_maml_ens_pure_2d"]),
         ("Pure MAML Single (S1-S4)", data["pred_maml_nobypass_ens_pure_2d"] if "pred_maml_nobypass_ens_pure_2d" in data else data["pred_maml_ens_pure_2d"]),
         ("Pure MAML Deep Ens (3-Seed)", data["pred_maml_nobypass_deep_ens_pure_2d"] if "pred_maml_nobypass_deep_ens_pure_2d" in data else data["pred_maml_nobypass_ens_pure_2d"]),
         ("Pure MAML Deep (+Naive)", data["pred_maml_nobypass_deep_ens_wn_2d"] if "pred_maml_nobypass_deep_ens_wn_2d" in data else data["pred_maml_ens_wn_2d"]),
-    ]
+    ])
 
     # Compute 15-minute Quarter-Hour rMAE (96 intervals per day)
     qh_rmae = {}
@@ -79,16 +77,19 @@ def generate_zone_plots(zone: str):
     fig, ax = plt.subplots(figsize=(14, 6), dpi=150)
     ax.axhline(1.0, color="black", linestyle="--", linewidth=1.5, label="Naive Benchmark (1.00)")
 
-    # Color palette
+    # Color palette (named matplotlib colors)
     colors = {
-        "Weighted LASSO (1-SE)": ("#7f7f7f", ":", 1.8, None),
-        "cSVR (S2 Neighbor)": ("#1f77b4", ":", 1.8, None),
-        "Pure cSVR Ens (S1-S4)": ("#2ca02c", "-", 2.2, "o"),
-        "cSVR Ens (+Naive)": ("#9467bd", "--", 1.8, "^"),
-        "MAML OptLASSO Ens": ("#ff7f0e", "--", 2.0, "v"),
-        "Pure MAML Single (S1-S4)": ("#d62728", "-.", 2.2, "s"),
-        "Pure MAML Deep Ens (3-Seed)": ("#e377c2", "-", 2.8, "D"),
-        "Pure MAML Deep (+Naive)": ("#8c564b", "--", 2.0, "*"),
+        "Standard LASSO": ("gray", ":", 1.8, None),
+        "Weighted LASSO (1-SE)": ("gray", ":", 1.8, None),
+        "cSVR (S2 Neighbor)": ("royalblue", ":", 1.8, None),
+        "Pure cSVR Ens (S1-S4)": ("forestgreen", "-", 2.2, "o"),
+        "Pure cSVR (No Corr)": ("darkturquoise", "-.", 2.0, "p"),
+        "cSVR Ens (+Naive)": ("purple", "--", 1.8, "^"),
+        "MAML (Bypass m=0.15)": ("darkorange", "--", 2.0, "v"),
+        "MAML OptLASSO Ens": ("darkorange", "--", 2.0, "v"),
+        "Pure MAML Single (S1-S4)": ("crimson", "-.", 2.2, "s"),
+        "Pure MAML Deep Ens (3-Seed)": ("deeppink", "-", 2.8, "D"),
+        "Pure MAML Deep (+Naive)": ("saddlebrown", "--", 2.0, "*"),
     }
 
     for name, (col, ls, lw, marker) in colors.items():

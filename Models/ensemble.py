@@ -15,6 +15,7 @@ Direct Methodological Foundation:
 from typing import Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
+import scipy.stats
 
 
 def compute_rolling_weighted_average(
@@ -24,12 +25,13 @@ def compute_rolling_weighted_average(
     calib_window: int = 14,
     power: float = 1.0,
     warmup_weights: Optional[Dict[str, float]] = None,
-    qh_adaptive: bool = False,
+    qh_adaptive: bool = True,
 ) -> Tuple[np.ndarray, pd.DataFrame, Dict[str, float]]:
     """
     Computes rolling out-of-sample forecast ensemble using strictly ex-ante inverse-MAE weights.
-    When qh_adaptive=True, computes separate ex-ante calibration weights for each quarter-hour position
-    to dynamically adapt to solar intraday duck curve volatility.
+    When qh_adaptive=True (default), computes separate ex-ante calibration weights for each 15-minute
+    quarter-hour position across past days (Puć & Janczura, 2024, intel_avg_generator.py), strictly
+    preventing any D-1 late-night information spillover.
     """
     model_names = list(predictions.keys())
     n_models = len(model_names)
@@ -142,3 +144,15 @@ def compute_rolling_qh_adaptive_ensemble(
 
 # Backward-compatible alias
 compute_rolling_intelligent_ensemble = compute_rolling_weighted_average
+
+
+def dm_test(actual: np.ndarray, p1: np.ndarray, p2: np.ndarray, h: int = 7) -> Tuple[float, float]:
+    """Multivariate daily-vector Diebold-Mariano test with Newey-West HAC variance (Ziel & Weron, 2018)."""
+    n = (min(len(actual), len(p1), len(p2)) // 96) * 96
+    d = np.mean(np.abs(actual[:n].reshape(-1, 96) - p1[:n].reshape(-1, 96)), axis=1) - \
+        np.mean(np.abs(actual[:n].reshape(-1, 96) - p2[:n].reshape(-1, 96)), axis=1)
+    d_bar, D = np.mean(d), len(d)
+    gamma = [np.mean((d[k:] - d_bar) * (d[:D - k] - d_bar)) for k in range(h + 1)]
+    var_hac = gamma[0] + 2 * sum((1 - k / (h + 1)) * gamma[k] for k in range(1, h + 1))
+    stat = float(d_bar / np.sqrt(max(var_hac, 1e-12) / D))
+    return stat, float(2 * (1 - scipy.stats.norm.cdf(abs(stat))))

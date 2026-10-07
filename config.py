@@ -8,7 +8,6 @@ import os
 PROJECT_ROOT       = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR           = os.path.join(PROJECT_ROOT, "Data")
 MASTER_PARQUET     = os.path.join(DATA_DIR, "master_dataset.parquet")
-MASTER_CSV         = os.path.join(DATA_DIR, "master_dataset_2021_2024.csv")
 FEATURES_CSV       = os.path.join(PROJECT_ROOT, "features.csv")
 
 MODELS_DIR         = os.path.join(PROJECT_ROOT, "Models")
@@ -53,8 +52,7 @@ NEIGHBOR_SAFE_VWAP_WINDOWS = {
     2: "120to135",
 }
 
-# Feature Sets
-FEATURE_SET_ALL         = "all"
+# Feature Sets (4 German Delivery Area Partitions)
 FEATURE_SET_MACRO       = "set1_macro"
 FEATURE_SET_NEIGHBOR    = "set2_neighbor"
 FEATURE_SET_FUNDAMENTAL = "set3_fundamental"
@@ -71,7 +69,7 @@ CSVR_NORM                    = 2            # L2 norm for cdist
 CSVR_USE_GAUSSIAN_CORRECTION = True         # Enable multiplicative Gaussian naive correction (Puć & Janczura, 2024, Eq. 12)
 CSVR_Q_KERNEL_NAIVE          = 0.75         # Quantile for naive Gaussian kernel threshold
 CSVR_Q_DATA_NAIVE            = 0.75         # Quantile for naive price difference normalization
-CSVR_USE_CORR_FILTER         = False        # Feature correlation filter: False (all features, recommended) | True (Puć 2024 filter)
+CSVR_USE_CORR_FILTER         = True         # Canonical benchmark default (Puć & Janczura 2024: True | Ablation without filter: False)
 CSVR_CORR_THRESH_S1          = 0.80         # Correlation threshold for S1 Macro
 CSVR_CORR_THRESH_S2          = 0.95         # Correlation threshold for S2 Neighbor
 
@@ -93,10 +91,9 @@ MAML_KERNEL_TAU           = 4.0         # Temperature scale factor for soft kern
 MAML_PROX_SHRINK          = 1e-5        # Proximal soft-thresholding shrinkage operator
 MAML_CLIP_RESIDUAL        = None        # Unconstrained NN residual
 MAML_USE_LINEAR_BYPASS    = False       
-MAML_BYPASS_SATURATION_M  = 0.15        
+MAML_BYPASS_SATURATION_M  = 0.15        # Smooth tanh saturation scale for Scenario 3: p_safe = m * tanh(p_lin / m)
 MAML_SUPPORT_SELECTION    = "regime_l1" # L1 distance nearest regimes within pool window
 MAML_SUPPORT_K            = 28          # Number of support days selected for inner adaptation
-MAML_SUPPORT_POOL_DAYS    = 822         # Support pool window (full 822-day historical training pool)
 
 MAML_META_EPOCHS          = 6           # Warm-start shared backbone training epochs
 MAML_BACKBONE_BATCH       = 256         # Batch size for backbone pre-training
@@ -105,7 +102,7 @@ MAML_SEEDS                = [42, 123, 999] # Multi-seed deep ensembling seeds pe
 # Rolling Weighted Average Ensemble (Puć & Janczura, 2024, Eq. 25; Marcjasz et al., 2018)
 ENSEMBLE_CALIB_DAYS       = 14          # Rolling calibration window in days (W in Eq. 25)
 ENSEMBLE_POWER            = 1.0         
+ENSEMBLE_QH_ADAPTIVE      = True        # Quarter-hour specific adaptive weighting (Puć & Janczura, 2024; prevents D-1 late-night look-ahead)
 
 # BACKTEST CONFIGURATION
-N_WORKERS        = 4          # Parallel  workers
-CHECKPOINT_EVERY = 10         # update results CSV every N test days
+N_WORKERS                 = 4           # Parallel CPU workers for multi-zone execution

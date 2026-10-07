@@ -8,7 +8,7 @@ Includes:
 """
 from Models.linear import train_lr, predict_lr, get_lr_weights, train_lasso, predict_lasso, get_lasso_weights
 from Models.csvr import train_csvr, predict_csvr, CSVRModel
-from Models.ensemble import compute_rolling_weighted_average, compute_rolling_intelligent_ensemble
+from Models.ensemble import compute_rolling_weighted_average, compute_rolling_intelligent_ensemble, dm_test
 
 
 def __getattr__(name: str):
@@ -34,5 +34,6 @@ __all__ = [
     "build_maml_net",
     "compute_rolling_weighted_average",
     "compute_rolling_intelligent_ensemble",
+    "dm_test",
 ]
 

@@ -58,14 +58,15 @@ Port of Puć & Janczura (2024, Eq. 12).
 * **Kernel:** Laplace kernel on standardized features multiplied by a Gaussian correction kernel on the standardized naive benchmark:
   $$K(x_i, x_j) = \exp\left(-\gamma \|x_i - x_j\|_2\right) \cdot \exp\left(-\frac{1}{2\sigma^2} (P_i^{\text{naive}} - P_j^{\text{naive}})^2\right)$$
 * **Feature Filtering & Correlation Ablation:** 
-  - *Zero-Variance Removal:* Applied to all feature sets.
-  - *Correlation Filtering (Puć & Janczura, 2024):* Prunes collinear features on the training set ($|r| \ge 0.80$ on S1, $|r| \ge 0.95$ on S2).
-  - *Unfiltered Variant (`CSVR_USE_CORR_FILTER = False`):* Eliminating the correlation filter preserves all 86 S1 features and 31 S2 features. Because SVR regularizes weights ($C=1.0$), avoiding arbitrary column pruning significantly improves accuracy (DE2 MAE drops from 26.2367 to 26.2044 EUR/MWh, Diebold-Mariano Stat = 4.4751, $p < 0.0001$). Toggleable via `CSVR_USE_CORR_FILTER` in [`config.py`](config.py).
+  - *Zero-Variance Removal:* Applied across all feature sets on the training portion only.
+  - *Canonical Benchmark Configuration (`CSVR_USE_CORR_FILTER = True`):* Following Puć & Janczura (2024), collinear features are pruned on the training set ($|r| \ge 0.80$ on S1, $|r| \ge 0.95$ on S2). This serves as the primary benchmark.
+  - *Ablation Study (Sensitivity Analysis, `CSVR_USE_CORR_FILTER = False`):* Eliminating the correlation filter preserves all 86 S1 features and 31 S2 features. Because SVR regularizes weights ($C=1.0$), avoiding arbitrary column pruning significantly improves accuracy (DE2 MAE drops from 26.2345 to 26.2044 EUR/MWh, Multivariate HAC Diebold-Mariano Stat = -4.4131, $p < 0.0001$). Toggleable via `CSVR_USE_CORR_FILTER` in [`config.py`](config.py).
 
 ### 3.3 Pure MAML-NN & Deep Ensembling
 Addresses small-sample limitations ($N \approx 792$ observations per quarter-hour) via meta-learning (Finn et al., 2017) directly on price spreads without linear bypass:
 * **Architecture:** 2-layer MLP (`[128, 64]`) with Tanh activation, L1 weight regularization ($10^{-4}$), and proximal soft-thresholding.
-* **Regime-Aware Support Sampling:** Fast compiled inner-loop adaptation (8 gradient steps, $\alpha = 0.0025$) on the $K=28$ nearest historical regimes selected via L1 feature distance with soft-kernel weighting.
+* **Ex-Ante Hyperparameter Selection:** Neural network architecture, support size ($K=28$), inner learning rate ($\alpha = 0.0025$), and kernel scaling ($\tau = 4.0$) were tuned strictly on historical pre-2024 data (2021–2023) and rolling 30-day ex-ante validation windows ($T-30$ to $T-1$) prior to each test date, preserving strict out-of-sample integrity for 2024.
+* **Regime-Aware Support Sampling:** Fast compiled inner-loop adaptation (8 gradient steps) on the $K=28$ nearest historical regimes selected via L1 feature distance with soft-kernel weighting.
 * **Deep Ensembling (Lago et al., 2021):** Trains multiple independent model instances with distinct random initializations (`seeds = [42, 123, 999]`), averaging forecasts per feature set to eliminate epistemic variance.
 
 ---
@@ -82,11 +83,11 @@ Models are trained on four distinct, non-overlapping feature sets:
 | **S4** | Zonal Balances | Bilateral intraday commercial flow balances and self-trading positions across delivery zones |
 
 ### Rolling Weighted Forecast Averaging
-Following Puć & Janczura (2024, Eq. 25) and Marcjasz, Serafin & Weron (2018), predictions across the four sets are combined using rolling ex-ante inverse-MAE weighting:
+Following the inverse-MAE weighting scheme originally introduced by Marcjasz, Serafin & Weron (2018, Eq. 5) and adapted to multi-feature ensembling by Puć & Janczura (2024, Eq. 25), predictions across the four feature sets are combined using rolling ex-ante inverse-MAE weighting:
 
-$$w_j^W = \frac{\frac{1}{\text{MAE}_j^W}}{\sum_{k} \frac{1}{\text{MAE}_k^W}}$$
+$$w_{j,q}^W = \frac{\frac{1}{\text{MAE}_{j,q}^W}}{\sum_{k} \frac{1}{\text{MAE}_{k,q}^W}}$$
 
-with historical calibration window $W = 14$ days. In accordance with experimental rules, ensembles are strictly intra-architecture (Pure cSVR Ensemble vs Pure MAML-NN Ensemble). Cross-architecture hybrids are excluded. 
+where $\text{MAE}_{j,q}^W$ is the out-of-sample mean absolute error of model/feature set $j$ computed specifically for delivery quarter-hour $q$ over the preceding $W = 14$ days (`ENSEMBLE_QH_ADAPTIVE = True`, matching Puć & Janczura's official implementation). This quarter-hour specific calibration captures time-of-day volatility profiles (e.g. midday solar duck curve) while strictly ensuring that forecasts executed late at night on day $D-1$ never incorporate unobserved late-night contracts from $D-1$. In accordance with experimental rules, ensembles are strictly intra-architecture (Pure cSVR Ensemble vs Pure MAML-NN Ensemble; cross-architecture hybrids are excluded).
 
 ---
 
@@ -174,12 +175,23 @@ Evaluation over all 35,132 continuous quarter-hours of calendar year 2024:
 | Model / Configuration | DE1 | DE2 (Amprion) | DE3 | DE4 | **Average** | Specification / Description |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
 | **Naive Benchmark** (`VWAP_90to105`) | 26.2815 | 26.6818 | 27.2725 | 27.2536 | **26.8724** | Persistent Baseline |
-| **Scenario 1: Standard LASSO** | 26.6733 | 27.2058 | 27.9223 | 27.8579 | **27.4148** | Linear L1 Regularization (Marcjasz et al., 2020) |
-| **Scenario 2: Pure cSVR Ensemble (with Corr Filter)** | 25.9016 | 26.2367 | 26.9297 | 26.7828 | **26.4627** | Puć & Janczura (2024) Standard Configuration |
-| **Scenario 2b: Pure cSVR Ensemble (No Corr Filter)** | — | **26.2044** | — | — | — | Full Feature Retention (Ablation, $p < 0.0001$) |
+| **Scenario 1: Standard LASSO** | 26.6651 | 27.2077 | 27.9160 | 27.8554 | **27.4111** | Linear L1 Regularization (Marcjasz et al., 2020) |
+| **Scenario 2: Pure cSVR Ensemble (with Corr Filter)** | 25.8960 | 26.2345 | 26.9249 | 26.7819 | **26.4593** | Puć & Janczura (2024) Standard Benchmark |
+| **Scenario 2b: Pure cSVR Ensemble (No Corr Filter)** | — | **26.2044** | — | — | — | Full Feature Retention (Ablation Study) |
 | **Scenario 3: MAML-NN with Linear Bypass ($m=0.15$)** | 25.9000 | 26.2781 | 26.9485 | 26.8383 | **26.4912** | Hybrid Meta-Learning Baseline |
-| **Scenario 4: Pure MAML-NN (Single Seed 42)** | 25.8966 | 26.1320 | 26.8130 | 26.7340 | **26.3939** | End-to-End Deep Meta-Learning Architecture |
-| **Scenario 5: Pure MAML-NN (Deep Ensemble, 3 Seeds)** | **25.8694** | **26.1121** | **26.7704** | **26.7068** | **26.3647** | Deep Ensemble (Variance-Reduced, Lowest MAE) |
+| **Scenario 4: Pure MAML-NN (Single Seed 42)** | 25.8803 | 26.1263 | 26.8084 | 26.7293 | **26.3861** | End-to-End Deep Meta-Learning Architecture |
+| **Scenario 5: Pure MAML-NN (Deep Ensemble, 3 Seeds)** | **25.8554** | **26.1087** | **26.7675** | **26.7025** | **26.3585** | Deep Ensemble (Variance-Reduced, Lowest MAE) |
+
+### Statistical Significance (Multivariate Daily HAC Diebold-Mariano Test)
+Following Ziel & Weron (2018) and Lago et al. (2021), predictive accuracy between **Pure MAML-NN Deep Ensemble** and **Pure cSVR Ensemble** is evaluated using daily mean loss differentials with Newey-West HAC variance estimation (lag $h = 7$ days) to strictly eliminate intra-day and day-to-day error autocorrelation:
+
+| Metric | DE1 | DE2 (Amprion) | DE3 | DE4 | Average |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **HAC DM Statistic** ($d_{\text{MAML}} - d_{\text{cSVR}}$) | -1.0659 | **-3.1073** | **-4.1124** | **-1.9185** | **-2.5510** |
+| **HAC $p$-value** | 0.2865 | **0.0019** | **< 0.0001** | **0.0550** | — |
+| **Significance Level** | — | $p < 0.01$ (**) | $p < 0.001$ (***) | $p < 0.10$ (*) | Consistent Advantage |
+
+* **Zero-Fallback Guarantee:** Exactly 0 out of 35,132 intervals (0.00%) encountered runtime exceptions or fell back to the naive benchmark across any model or delivery area (100% successful numerical convergence).
 
 ---
 
