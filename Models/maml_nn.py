@@ -15,7 +15,10 @@ import numpy as np
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # Strictly CPU execution to avoid multi-process GPU conflicts
+import logging
+logging.getLogger("tensorflow").setLevel(logging.ERROR)
 import tensorflow as tf
+tf.get_logger().setLevel(logging.ERROR)
 from tensorflow import keras
 from tensorflow.keras import layers, regularizers
 from scipy.spatial.distance import cdist
