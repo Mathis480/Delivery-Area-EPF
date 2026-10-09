@@ -1,25 +1,10 @@
 #%%
 """
-This script processes raw EPEX Intraday Continuous trade and index CSV files (2021-2024)
-for Germany (national market area 'DE') as well as individual transmission system 
-operator (TSO) control zones ('DE1' TransnetBW, 'DE2' Amprion, 'DE3' TenneT, 'DE4' 50Hertz).
+Pre-aggregates raw EPEX Intraday Continuous sub-second tick trades (2021-2024)
+into 15-minute lead-time windows (VWAP, volume, trade count, flow balances)
+for German TSO control areas (DE1-DE4) and national aggregate (DE) in pure UTC.
 
-Content:
--------------
-1. Pure UTC Time Handling
-2. Lead-Time Window Aggregation:
-   - Calculates rolling Volume-Weighted Average Prices (VWAP), traded volumes, and trade counts 
-     across 25 discrete time intervals prior to contract delivery (e.g., 345-360m down to 0-15m + label col 0-30) -> 25 columns.
-3. Cross-Border & Zonal Flow Balances:
-   - Identifies whether a trade is internal ('self'), an import, or an export.
-   - Computes net trading balances overall and specifically against each German TSO zone (DE1-DE4).
-4. Robust Filtering & Quality Control:
-   - Filters for 15-minute quarter-hour contracts (ignores hourly and half-hourly products).
-   - Eliminates self-trades ('SelfTrade' == 'N').
-   - Deduplicates trade records, so buyer and seller legs are not double-counted. Trades with only one trade side are removed.
-5. Parallel Processing:
-   - ProcessPoolExecutor across multi-core CPUs for batch file processing.
-   - Includes an interactive step debugger mode for auditing individual trades and verifying data.
+See README.md for full methodology, window definitions, and schema.
 """
 
 import os
@@ -28,22 +13,12 @@ import pandas as pd
 import datetime as dt
 import tqdm
 import numpy as np
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=DeprecationWarning)
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 
-# ==============================================================================
-# DEBUG / STEPPER CONFIGURATION
-# Set DEBUG_MODE = True to enable interactive step-by-step terminal inspection.
-# Set DEBUG_MODE = False for fast, parallel production execution.
-# ==============================================================================
-DEBUG_MODE = False
-DEBUG_ONLY_NON_EMPTY = False     # If True, stepper only pauses on intervals with >= 1 trade
-DEBUG_FILTER_DELIVERY = None     # Filter by specific timestamp (e.g., "2021-10-01 04:00:00") or None
-# ==============================================================================
-SKIP_DELIVERY_START = True       # Global flag used to skip remaining intervals of current contract
 
 # Lead-time windows: ordered chronologically from earliest (345to360m prior) down to gate closure (0to15m, *0to30m - label!*)
 LEAD_TIME_WINDOW_NAMES = [
@@ -62,99 +37,63 @@ LEAD_TIME_INTERVALS = [
 ][::-1]
 
 def calculate_vwap(df_subset: pd.DataFrame) -> float:
-    """
-    Calculate the Volume-Weighted Average Price (VWAP) for a subset of transactions.
-    Returns NaN if total volume is zero or no trades exist.
-    For more info read: https://arxiv.org/abs/1812.09081
-    """
+    """Calculate Volume-Weighted Average Price (VWAP) in EUR/MWh, or NaN if zero volume."""
     vol = df_subset['Volume'].sum()
     if vol == 0:
         return np.nan
-    else:
-        return np.round((df_subset['Price'] * df_subset['Volume']).sum() / vol, 2)
+    return np.round((df_subset['Price'] * df_subset['Volume']).sum() / vol, 2)
 
 
 def calculate_total_volume(df_subset: pd.DataFrame) -> float:
-    """Calculate the total traded volume in MWh for a subset of transactions."""
+    """Calculate total traded volume in MWh."""
     try:
-        result = np.round(df_subset['Volume'].sum(), 2)
+        return np.round(df_subset['Volume'].sum(), 2)
     except Exception:
-        result = np.nan
-    return result
+        return np.nan
 
 
 def calculate_total_trades(df_subset: pd.DataFrame) -> int:
-    """Count the total number of executed trades for a subset of transactions."""
+    """Count total executed trades."""
     try:
-        result = len(df_subset)
+        return len(df_subset)
     except Exception:
-        result = np.nan
-    return result
+        return np.nan
 
 
 def calculate_idbalance(df_subset: pd.DataFrame) -> float:
-    """
-    Calculate the balance across all cross-border trades. This will help us to identify trades between zones and maybe uncover some imbalances beforehand.
-    
-    Convention:
-    - Imports add positive volume to the local area balance (+Volume).
-    - Exports subtract volume from the local area balance (-Volume).
-    """
+    """Calculate net trade balance (imports positive, exports negative) in MWh."""
     if df_subset['Volume'].sum() == 0:
         return np.nan
-    else:
-        temp_df_balance = df_subset[(df_subset['TradeTyp'] == 'export') | (df_subset['TradeTyp'] == 'import')].copy()
-        temp_df_balance['Volume'] = np.where(temp_df_balance['TradeTyp'] == 'export', -1 * temp_df_balance['Volume'], temp_df_balance['Volume'])
-        result = np.round(temp_df_balance['Volume'].sum(), 3)
-    return result
+    temp_df = df_subset[df_subset['TradeTyp'].isin(['export', 'import'])].copy()
+    temp_df['Volume'] = np.where(temp_df['TradeTyp'] == 'export', -temp_df['Volume'], temp_df['Volume'])
+    return np.round(temp_df['Volume'].sum(), 3)
 
 
 def calculate_idbalance_to_zone(df_subset: pd.DataFrame, zone_code: str) -> float:
-    """
-    Calculate the trade balance specifically with German TSO zone.
-    
-    Parameters:
-    -----------
-    df_subset : pd.DataFrame
-        Trade records for the window.
-    zone_code : str
-        Target counterpart area identifier (e.g., 'DE1', 'DE2', 'DE3', 'DE4').
-    """
+    """Calculate bilateral net trade balance with a specific German TSO zone."""
     if df_subset['Volume'].sum() == 0:
         return np.nan
-    else:
-        temp_df_balance = df_subset[(df_subset['TradeTyp'] == 'export') | (df_subset['TradeTyp'] == 'import')].copy()
-        temp_df_balance = temp_df_balance[temp_df_balance['DeliveryArea'] == zone_code]
-        temp_df_balance['Volume'] = np.where(temp_df_balance['TradeTyp'] == 'export', -1 * temp_df_balance['Volume'], temp_df_balance['Volume'])
-        result = np.round(temp_df_balance['Volume'].sum(), 3)
-    return result
+    temp_df = df_subset[df_subset['TradeTyp'].isin(['export', 'import']) & (df_subset['DeliveryArea'] == zone_code)].copy()
+    temp_df['Volume'] = np.where(temp_df['TradeTyp'] == 'export', -temp_df['Volume'], temp_df['Volume'])
+    return np.round(temp_df['Volume'].sum(), 3)
 
 
 def calculate_idbalance_to_self(df_subset: pd.DataFrame) -> float:
-    """Calculate the total volume of purely internal trades within the same delivery zone. THESE ARE NO SELF-TRADES IN SENSE OF EXCEL-FILE. """
+    """Calculate internal trading volume within the same delivery zone."""
     if df_subset['Volume'].sum() == 0:
         return np.nan
-    else:
-        temp_df_balance = df_subset[df_subset['TradeTyp'] == 'self'].copy()
-        result = np.round(temp_df_balance['Volume'].sum(), 3)
-    return result
+    temp_df = df_subset[df_subset['TradeTyp'] == 'self']
+    return np.round(temp_df['Volume'].sum(), 3)
 
 
 def calculate_metrics(
     df: pd.DataFrame, 
-    delivery_start: pd.Timestamp, # for debug purposes
     window_metrics_list: list, 
     window_idx: int, 
     interval_name: str, 
     window_names: list
 ) -> list:
-    """
-    Compute summary metrics for a given lead-time window.
-    
-    If no trades occurred in the window:
-    - VWAP is forward-filled from the immediately preceding (earlier) window in window_metrics_list.
-    - Traded volumes, counts, and flow balances are set to 0.
-    """
+    """Compute 9 window metrics; forward-fills VWAP and zeroes volumes if no trades occurred."""
     temp_list = []
     if df.empty:
         if len(window_metrics_list) == 0:
@@ -200,52 +139,19 @@ def calculate_metrics(
     return temp_list
 
 
-def get_trade_type(delivery_area: str, trade_id: int, target_area: str, side: str) -> str:
-    """
-    Classify a trade record into 'self', 'export', or 'import' relative to the analyzed area.
-    
-    delivery_area : str
-        Delivery area of this trade record.
-    trade_id : int
-        Unique EPEX trade ID. For debug purposes.
-    target_area : str
-        Target delivery area being analyzed (e.g., 'DE' or 'DE1'..'DE4').
-    side : str
-        Order side ('BUY' or 'SELL').
-        
-    Returns:
-        'self'   : Counterparty is within the same target area.
-        'export' : Target area sells power to an external area (Side == 'BUY' on counterpart).
-        'import' : Target area buys power from an external area (Side == 'SELL' on counterpart).
-    """
-    if target_area == 'DE':
-        is_target = str(delivery_area).startswith('DE')
+def classify_trade_direction(delivery_area: str, side: str, target_area: str) -> str:
+    """Classify trade direction from counterparty perspective ('self', 'export', 'import')."""
+    is_same_area = str(delivery_area).startswith('DE') if target_area == 'DE' else (delivery_area == target_area)
+    if is_same_area:
+        return 'self'
+    elif side == 'BUY':
+        return 'export'  # Counterparty buys -> target area exports
     else:
-        is_target = (delivery_area == target_area)
-        
-    if not is_target:
-        if side == "BUY":
-            # BUY someone wants to buy from your area - so you are exporting
-            return "export" 
-        elif side == "SELL":
-            # SELL someone wants to sell to your area - so you are importing
-            return "import"
-    return "self"
+        return 'import'  # Counterparty sells -> target area imports
 
 
 def process_single_trade_file(args: tuple) -> pd.DataFrame:
-    """
-    Worker function executed in parallel for a single daily trade file.
-    
-    Processing Steps:
-    1. Read CSV and strip whitespace from headers.
-    2. Filter for 15-minute contracts (duration == 15 min & Product name).
-    3. Filter out self-trades ('SelfTrade' == 'N').
-    4. Isolate trades where at least one party belongs to the target delivery area.
-    5. Classify trade direction ('self', 'export', 'import') and deduplicate TradeId.
-    6. Compute lead-time difference in minutes: TimeDiff = DeliveryStart - ExecutionTime (UTC).
-    7. Partition trades into 25 discrete lead-time windows and calculate metrics.
-    """
+    """Process a single daily trade file into lead-time window aggregates."""
     file_path, target_area = args
     try:  
         # 1. Read CSV and strip whitespace from headers.
@@ -256,23 +162,15 @@ def process_single_trade_file(args: tuple) -> pd.DataFrame:
 
         df_trades.columns = [str(c).strip() for c in df_trades.columns]
 
-        # 2.1 Filter by Delivery Duration: strictly 15 minutes (900 seconds)
-        if 'DeliveryStart' in df_trades.columns and 'DeliveryEnd' in df_trades.columns:
-            ds_dt = pd.to_datetime(df_trades['DeliveryStart'], utc=True, errors='coerce')
-            de_dt = pd.to_datetime(df_trades['DeliveryEnd'], utc=True, errors='coerce')
-            duration_min = (de_dt - ds_dt).dt.total_seconds() / 60.0
-            df_trades = df_trades[duration_min == 15]
-
-        # 2.2 Filter by Product name: must be 15-min contract (exclude hourly/block contracts)
+        # 2. Filter by Product: strictly 15-min contracts (quarter-hour power)
         if 'Product' in df_trades.columns:
             df_trades = df_trades[df_trades['Product'].isin(['Intraday_Quarter_Hour_Power', 'XBID_Quarter_Hour_Power'])]
 
         # 3. Filter by SelfTrade: discard internal wash trading ('N' = genuine trade)
         if 'SelfTrade' in df_trades.columns:
-            df_trades['SelfTrade'] = df_trades['SelfTrade'].astype(str).str.strip()
-            df_trades = df_trades[df_trades['SelfTrade'] == 'N']
+            df_trades = df_trades[df_trades['SelfTrade'].astype(str).str.strip() == 'N']
 
-        # 3.1 Drop non-essential metadata columns to reduce memory consumption
+        # 3.1 Drop non-essential metadata columns
         cols_to_drop = [c for c in ['RemoteTradeId', 'DeliveryEnd', 'UserDefinedBlock', 'Currency', 'OrderID', 'TradePhase', 'VolumeUnit', 'Product'] if c in df_trades.columns]
         df_trades = df_trades.drop(columns=cols_to_drop)
 
@@ -288,11 +186,13 @@ def process_single_trade_file(args: tuple) -> pd.DataFrame:
         if df_trades.empty:
             return None
 
-        # 5. Classify trade type (self, import, export)
-        df_trades['TradeTyp'] = df_trades.apply(
-            lambda row: get_trade_type(row['DeliveryArea'], row['TradeId'], target_area, row.get('Side', 'BUY')), 
-            axis=1
-        )
+        # 5. Classify trade direction from counterparty perspective:
+        # Counterparty BUYS -> target area exports; Counterparty SELLS -> target area imports
+        sides = df_trades['Side'] if 'Side' in df_trades.columns else ['BUY'] * len(df_trades)
+        df_trades['TradeTyp'] = [
+            classify_trade_direction(area, side, target_area)
+            for area, side in zip(df_trades['DeliveryArea'], sides)
+        ]
 
         # 5.1 Deduplicate trades: sort so cross-border legs are prioritized and retain one unique record per TradeId
         df_trades = df_trades.sort_values(by=['TradeId', 'TradeTyp'], ascending=True)
@@ -319,18 +219,10 @@ def process_single_trade_file(args: tuple) -> pd.DataFrame:
         # 7.1 Aggregate metrics across all delivery quarter-hours
         delivery_records = []
         for delivery_start in delivery_starts:
-            global SKIP_DELIVERY_START
-            SKIP_DELIVERY_START = False
-
             window_metrics_list = []
             for j, interval_name in enumerate(LEAD_TIME_WINDOW_NAMES):
                 df_sub = df_binned_trades[interval_name][df_binned_trades[interval_name]['DeliveryStart'] == delivery_start]
-                lead_from, lead_to = LEAD_TIME_INTERVALS[j]
-                
-                if DEBUG_MODE:
-                    run_step_debugger(df_sub, delivery_start, interval_name, lead_from, lead_to)
-
-                metrics = calculate_metrics(df_sub, delivery_start, window_metrics_list, j, interval_name, LEAD_TIME_WINDOW_NAMES)
+                metrics = calculate_metrics(df_sub, window_metrics_list, j, interval_name, LEAD_TIME_WINDOW_NAMES)
                 window_metrics_list.extend(metrics)
                 
             flat_dict = {k: v for d in window_metrics_list for k, v in d.items()}
@@ -354,47 +246,17 @@ def process_trade_files(
     source_dir: str, 
     output_dir: str
 ) -> None:
-    """
-    Annual batch manager coordinating the processing of all daily trade files for a given year.
-    
-    1. Task Preparation:
-       Pairs each daily CSV file with the target delivery area. (Build tasks list for parallel execution)
-       
-    2. Parallel Execution (or Sequential Debugger):
-       - If DEBUG_MODE is True: Runs sequentially on 1 CPU core!
-         debugger ([ENTER], [s], [q]) functions without terminal conflicts.
-       - If DEBUG_MODE is False: Distributes all daily files across available CPU cores.
-         
-    3. Consolidation & Final Export:
-       - Concatenates all daily DataFrames into one continuous annual time series.
-       - Reorders columns so 'DeliveryStart' is the first (timestamp index) column.
-       - Sorts rows chronologically by DeliveryStart and drops duplicate delivery intervals.
-       - Exports the final annual dataset as 'ID_DelArea_{target_area}_{year}.csv' in 15 minute Steps (~35,040 rows).
-    """
-    # 1. Build list of task tuples: (filepath, target_area) for each daily file
+    """Parallel processing of all daily trade files for a year and export CSV."""
     file_args = [(os.path.join(source_dir, filename), target_area) for filename in file_list]
-    df_naive_list = []
-
-    # 2. Execute processing: Sequential debug mode vs. Parallel multiprocessing
-    if DEBUG_MODE:
-        print(f"\n-> [DEBUG MODE ACTIVE] Processing EPEX trade files sequentially for {target_area} {year}...")
-        for arg in tqdm.tqdm(file_args, desc=f"{target_area}_{year}_trades"):
-            try:
-                res = process_single_trade_file(arg)
-                if res is not None and not res.empty:
-                    df_naive_list.append(res)
-            except KeyboardInterrupt:
-                print("\n[DEBUG] Debugging terminated by user.")
-                break
-    else:
-        num_workers = max(1, (os.cpu_count() or 4) - 1)
-        print(f"-> Processing EPEX continuous trade files (UTC) for {target_area} {year} ({len(file_list)} files across {num_workers} CPU cores)...")
-        with ProcessPoolExecutor(max_workers=num_workers) as executor:
-            futures = {executor.submit(process_single_trade_file, arg): arg for arg in file_args}
-            for future in tqdm.tqdm(as_completed(futures), total=len(futures), desc=f"{target_area}_{year}_trades"):
-                res = future.result()
-                if res is not None and not res.empty:
-                    df_naive_list.append(res)
+    num_workers = max(1, (os.cpu_count() or 4) - 1)
+    print(f"-> Processing EPEX continuous trade files (UTC) for {target_area} {year} ({len(file_list)} files across {num_workers} CPU cores)...")
+    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        results = list(tqdm.tqdm(
+            executor.map(process_single_trade_file, file_args),
+            total=len(file_args),
+            desc=f"{target_area}_{year}_trades"
+        ))
+    df_naive_list = [df for df in results if df is not None and not df.empty]
 
     # 3. Consolidate, sort, and save final annual time series
     if df_naive_list:
@@ -403,7 +265,7 @@ def process_trade_files(
         # Ensure DeliveryStart is the primary first column
         col = ["DeliveryStart"]
         df_naive = df_naive[col + [x for x in df_naive.columns if x not in col]]
-        df_naive = df_naive.sort_values(by='DeliveryStart').drop_duplicates(subset=['DeliveryStart'])
+        df_naive = df_naive.sort_values(by='DeliveryStart')
         
         output_file = os.path.join(output_dir, f'ID_DelArea_{target_area}_{year}.csv')
         df_naive.to_csv(output_file, index=False)
@@ -418,13 +280,9 @@ def calculate_id_da_utc(
     source_dir: str = None, 
     output_dir: str = None
 ) -> None:
-    """
-    Main entry point for processing EPEX trade data for a specific year and market/TSO area.
-    """
+    """Pre-aggregate EPEX continuous trades for a specific year and target area."""
     pd.options.mode.chained_assignment = None
-
-    base_dir = '/home/mat/Dokumente/Delivery Area EPF/Data/EPEX Intraday Continuous'
-
+    base_dir = os.path.dirname(os.path.abspath(__file__))
     if output_dir is None:
         output_dir = base_dir
     os.makedirs(output_dir, exist_ok=True)
@@ -433,7 +291,7 @@ def calculate_id_da_utc(
         source_dir = os.path.join(base_dir, f'{year}')
 
     if not os.path.exists(source_dir):
-        print(f"WARNING: Directory not found for year {year}: {source_dir}")
+        print(f"Directory not found for year {year}: {source_dir}")
         return
 
     # Filter for valid EPEX trade CSV files
@@ -451,85 +309,16 @@ def calculate_id_da_utc(
 
     process_trade_files(year, target_area, file_list, source_dir, output_dir)
 
-#=========== Debugging and Validation ============
 
-def run_step_debugger(
-    df_sub: pd.DataFrame, 
-    delivery_start: pd.Timestamp, 
-    interval_name: str, 
-    lead_time_from_min: int, 
-    lead_time_to_min: int
-) -> None:
-    """
-    Debugger to inspect individual trades and calculated metrics.
-
-    df_sub : pd.DataFrame
-        Subset of trades falling within the current lead-time window.
-    delivery_start : pd.Timestamp
-        Delivery start timestamp (UTC) of the quarter-hour contract.
-    interval_name : str
-        Interval name (e.g., '15to30', '0to15') for lead-time window.
-    lead_time_from_min : int
-        Lower lead-time boundary in minutes before delivery.
-    lead_time_to_min : int
-        Upper lead-time boundary in minutes before delivery.
-    """
-    global SKIP_DELIVERY_START
-
-    if SKIP_DELIVERY_START:
-        return
-
-    # Skip contracts that do not match the specified debug filter
-    if DEBUG_FILTER_DELIVERY is not None and str(DEBUG_FILTER_DELIVERY) not in str(delivery_start):
-        return
-
-    # Skip intervals without trading activity if configured
-    if DEBUG_ONLY_NON_EMPTY and df_sub.empty:
-        return
-
-    price = calculate_vwap(df_sub)
-    vol = calculate_total_volume(df_sub)
-    trades_cnt = calculate_total_trades(df_sub)
-
-    print("\n" + "=" * 85)
-    print(f"DeliveryStart: {delivery_start} | Interval: '{interval_name}' ({lead_time_from_min} to {lead_time_to_min} min prior)")
-    print("=" * 85)
-
-    cols_display = [c for c in ['TradeId', 'ExecutionTime', 'Price', 'Volume', 'Side', 'DeliveryArea', 'SelfTrade', 'TradeTyp'] if c in df_sub.columns]
-
-    print(f"\n--- CONTRIBUTING TRADES (Count: {len(df_sub)}) ---")
-    if not df_sub.empty:
-        print(df_sub[cols_display].to_string(index=False))
-        if 'SelfTrade' in df_sub.columns:
-            st_counts = df_sub['SelfTrade'].value_counts().to_dict()
-            print(f"\n   -> SelfTrade Value Distribution: {st_counts}")
-    else:
-        print("   (No trades recorded in this interval)")
-
-    print(f"\n--- CALCULATED METRICS FOR '{interval_name}' ---")
-    print(f"   VWAP (Weighted Price): {price} EUR/MWh")
-    print(f"   Total Traded Volume:  {vol} MWh")
-    print(f"   Trade Count:          {trades_cnt}")
-    print("=" * 85)
-
-    try:
-        ans = input(" [ENTER] = Next Step | [s] = Skip This DeliveryStart | [q] = Quit Debugger: ").strip().lower()
-        if ans == 's':
-            SKIP_DELIVERY_START = True
-        elif ans == 'q':
-            raise KeyboardInterrupt("Debugger terminated by user.")
-    except (EOFError, KeyboardInterrupt):
-        raise
 
 #==================== MAIN =======================
 
 if __name__ == '__main__':
-    # Configuration for standalone execution
     years = [2021, 2022, 2023, 2024]
     areas = ['DE1', 'DE2', 'DE3', 'DE4', 'DE']
-    out_dir = '/home/mat/Dokumente/Delivery Area EPF/Data/EPEX Intraday Continuous/'
+    script_dir = os.path.dirname(os.path.abspath(__file__))
     
     print("Starting recomputation for years 2021-2024 across all TSO zones in EPEX UTC time (Multiprocessing)...")
     for year in years:
         for area in areas:
-            calculate_id_da_utc(year=year, target_area=area, output_dir=out_dir)
+            calculate_id_da_utc(year=year, target_area=area, output_dir=script_dir)

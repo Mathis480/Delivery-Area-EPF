@@ -27,4 +27,3 @@ Together, these two data streams provide uninterrupted, consistent 15-minute int
 * `intraday_auction_spot_prices_15-call_germany_2023.csv`
 * `intraday_auction_spot_prices_15-call_germany_2024.csv`
 * `pan-european_prices_germany_luxembourg_IDA1_2024.csv`
-* `process_id_auction_prices.py`: Unified pipeline joining 15-call DE and Pan-European IDA1 into a continuous 15-minute UTC series.

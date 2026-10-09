@@ -21,4 +21,3 @@ This directory contains Day-Ahead auction clearing spot prices for the bidding z
 * `auction_spot_prices_germany_luxembourg_2022.csv`: Raw wide EPEX Day-Ahead prices 2022.
 * `auction_spot_prices_germany_luxembourg_2023.csv`: Raw wide EPEX Day-Ahead prices 2023.
 * `auction_spot_prices_germany_luxembourg_2024.csv`: Raw wide EPEX Day-Ahead prices 2024.
-* `process_da_auction_prices.py`: Autonomous processing pipeline generating the continuous 15-minute UTC series.
