@@ -73,9 +73,9 @@ class TestConfigConsistency(unittest.TestCase):
         from config import LOOKBACK_DAYS
         self.assertEqual(LOOKBACK_DAYS, 822)
 
-    def test_val_30_days(self):
+    def test_val_days(self):
         from config import VAL_DAYS
-        self.assertEqual(VAL_DAYS, 30)
+        self.assertEqual(VAL_DAYS, 0)
 
     def test_test_window_2024(self):
         from config import TEST_START, TEST_END
@@ -135,7 +135,7 @@ class TestFeaturesCatalogue(unittest.TestCase):
         if not os.path.exists(MASTER_PARQUET):
             self.skipTest("master_dataset.parquet not found")
         from data_loader import QHDataLoader
-        loader = QHDataLoader(verbose=False)
+        loader = QHDataLoader()
         for zone in ["DE1", "DE2", "DE3", "DE4"]:
             feats = loader.feature_names(zone)
             target = f"{zone}_VWAP_0to30"
@@ -195,7 +195,7 @@ class TestDataLoader(unittest.TestCase):
         if not os.path.exists(MASTER_PARQUET):
             raise unittest.SkipTest("master_dataset.parquet not found — skipping data tests")
         from data_loader import QHDataLoader
-        cls.loader = QHDataLoader(verbose=False)
+        cls.loader = QHDataLoader()
 
     def test_96_qh_tables(self):
         """Must have exactly 96 QH tables (0..95)."""
@@ -262,7 +262,7 @@ class TestDataLoader(unittest.TestCase):
         self.assertGreater(w.y_std, 0)
 
     def test_scaler_fitted_on_train_only(self):
-        """StandardScaler must be fitted on X_train, not X_trainval."""
+        """StandardScaler must be fitted on X_train (history up to T-1)."""
         w = self.loader.get_window("DE2", 48, "2024-06-15")
         if w is None:
             self.skipTest("No data available")
@@ -418,7 +418,7 @@ class TestFeatureSetPartitioning(unittest.TestCase):
         if not os.path.exists(MASTER_PARQUET):
             raise unittest.SkipTest("master_dataset.parquet not found")
         from data_loader import QHDataLoader
-        cls.loader = QHDataLoader(verbose=False)
+        cls.loader = QHDataLoader()
 
     def test_s2_contains_only_neighbor_features(self):
         """Set 2 (Neighbor) should only contain _nb_ features plus benchmark."""
@@ -610,9 +610,10 @@ class TestModelAPIContracts(unittest.TestCase):
     def test_maml_adapt_and_predict(self):
         """MAML adapt_and_predict interface test with synthetic support/test sets."""
         from Models.maml_nn import MAMLManager
+        from config import FEATURE_SET_MACRO
         np.random.seed(42)
         n_feat = 10
-        mgr = MAMLManager(zone="DE2", n_features=n_feat, feature_set="s1", seed=42)
+        mgr = MAMLManager(zone="DE2", n_features=n_feat, feature_set=FEATURE_SET_MACRO, seed=42)
         mgr.set_backbone_weights(mgr._working_model.get_weights())
         X_supp = np.random.randn(50, n_feat).astype(np.float32)
         y_supp = np.random.randn(50).astype(np.float32)
@@ -629,7 +630,6 @@ class TestModelAPIContracts(unittest.TestCase):
             train_csvr, predict_csvr, CSVRModel,
             MAMLManager, build_maml_net,
             compute_rolling_weighted_average,
-            compute_rolling_intelligent_ensemble,
         )
         # Just check they're callable
         self.assertTrue(callable(train_csvr))

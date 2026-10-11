@@ -24,12 +24,12 @@ import numpy as np
 from tqdm import tqdm
 
 from config import (
-    RESULTS_DIR, LOOKBACK_DAYS, VAL_DAYS, N_QH, ZONES,
+    RESULTS_DIR, LOOKBACK_DAYS, N_QH, ZONES,
     FEATURE_SET_MACRO, FEATURE_SET_NEIGHBOR,
     FEATURE_SET_FUNDAMENTAL, FEATURE_SET_BALANCE,
     CSVR_CORR_THRESH_S1, CSVR_CORR_THRESH_S2,
     ENSEMBLE_CALIB_DAYS, ENSEMBLE_POWER, ENSEMBLE_QH_ADAPTIVE, MAML_SEEDS,
-    N_WORKERS,
+    MAML_BYPASS_MODES, N_WORKERS,
 )
 from data_loader import QHDataLoader
 from Models.linear import train_lasso, predict_lasso
@@ -123,41 +123,48 @@ def _ensemble_and_save_results(zone: str, preds: dict[str, list[float]], data: d
     data["pred_csvr_nocorr_ens_pure_2d"] = p_c_nocorr_ens_2d
     data["pred_csvr_nocorr_ens_pure"] = _to_1d(p_c_nocorr_ens_2d)
 
-    # 3. Pure MAML Single & Deep Ensemble
-    single_sets_2d = {}
-    deep_sets_2d = {}
-    for s in FEATURE_SETS:
-        st = SET_TAGS[s]
-        seed_arrays = []
-        for sd in MAML_SEEDS:
-            arr_sd = np.array(preds[f"maml_nobypass_{st}_seed{sd}"], dtype=np.float32)
-            data[f"pred_maml_nobypass_{st}_seed{sd}"] = arr_sd
-            seed_arrays.append(arr_sd)
-            if sd == 42:
-                data[f"pred_maml_nobypass_{st}"] = arr_sd
-                mat_s42 = _to_2d(arr_sd)
-                data[f"pred_maml_nobypass_{st}_2d"] = mat_s42
-                single_sets_2d[f"single_{st}"] = mat_s42
+    # 3. MAML Single & Deep Ensemble (across configured bypass modes)
+    for mode in MAML_BYPASS_MODES:
+        single_sets_2d = {}
+        deep_sets_2d = {}
+        for s in FEATURE_SETS:
+            st = SET_TAGS[s]
+            seed_arrays = []
+            primary_seed = MAML_SEEDS[0]
+            for sd in MAML_SEEDS:
+                arr_sd = np.array(preds[f"maml_{mode}_{st}_seed{sd}"], dtype=np.float32)
+                data[f"pred_maml_{mode}_{st}_seed{sd}"] = arr_sd
+                seed_arrays.append(arr_sd)
+                if sd == primary_seed:
+                    data[f"pred_maml_{mode}_{st}"] = arr_sd
+                    mat_single = _to_2d(arr_sd)
+                    data[f"pred_maml_{mode}_{st}_2d"] = mat_single
+                    single_sets_2d[f"single_{st}"] = mat_single
 
-        avg_1d = np.mean(seed_arrays, axis=0).astype(np.float32)
-        data[f"pred_maml_nobypass_deep_{st}"] = avg_1d
-        mat_deep = _to_2d(avg_1d)
-        data[f"pred_maml_nobypass_deep_{st}_2d"] = mat_deep
-        deep_sets_2d[f"deep_{st}"] = mat_deep
+            avg_1d = np.mean(seed_arrays, axis=0).astype(np.float32)
+            data[f"pred_maml_{mode}_deep_{st}"] = avg_1d
+            mat_deep = _to_2d(avg_1d)
+            data[f"pred_maml_{mode}_deep_{st}_2d"] = mat_deep
+            deep_sets_2d[f"deep_{st}"] = mat_deep
 
-    # Single-Seed 42 Ensemble
-    p_single_2d, _, _ = compute_rolling_weighted_average(
-        single_sets_2d, y_true_2d, bm_2d, calib_window=ENSEMBLE_CALIB_DAYS, power=ENSEMBLE_POWER, qh_adaptive=ENSEMBLE_QH_ADAPTIVE
-    )
-    data["pred_maml_nobypass_ens_pure_2d"] = p_single_2d
-    data["pred_maml_nobypass_ens_pure"] = _to_1d(p_single_2d)
+        # Single-Seed Ensemble (Primary Seed)
+        p_single_2d, _, _ = compute_rolling_weighted_average(
+            single_sets_2d, y_true_2d, bm_2d, calib_window=ENSEMBLE_CALIB_DAYS, power=ENSEMBLE_POWER, qh_adaptive=ENSEMBLE_QH_ADAPTIVE
+        )
+        data[f"pred_maml_{mode}_ens_pure_2d"] = p_single_2d
+        data[f"pred_maml_{mode}_ens_pure"] = _to_1d(p_single_2d)
 
-    # Deep Ensemble across sets
-    p_deep_2d, _, _ = compute_rolling_weighted_average(
-        deep_sets_2d, y_true_2d, bm_2d, calib_window=ENSEMBLE_CALIB_DAYS, power=ENSEMBLE_POWER, qh_adaptive=ENSEMBLE_QH_ADAPTIVE
-    )
-    data["pred_maml_nobypass_deep_ens_pure_2d"] = p_deep_2d
-    data["pred_maml_nobypass_deep_ens_pure"] = _to_1d(p_deep_2d)
+        # Deep Ensemble across sets
+        p_deep_2d, _, _ = compute_rolling_weighted_average(
+            deep_sets_2d, y_true_2d, bm_2d, calib_window=ENSEMBLE_CALIB_DAYS, power=ENSEMBLE_POWER, qh_adaptive=ENSEMBLE_QH_ADAPTIVE
+        )
+        data[f"pred_maml_{mode}_deep_ens_pure_2d"] = p_deep_2d
+        data[f"pred_maml_{mode}_deep_ens_pure"] = _to_1d(p_deep_2d)
+
+        # Backward compatibility alias for Scenario 3
+        if mode == "optlasso":
+            data["pred_maml_ens_pure_2d"] = p_single_2d
+            data["pred_maml_ens_pure"] = _to_1d(p_single_2d)
 
     # Save to canonical NPZ
     np.savez_compressed(in_npz, **data)
@@ -180,19 +187,22 @@ def _run_zone(zone: str) -> None:
         preds[f"lasso_std_{st}"] = []
         preds[f"csvr_{st}"] = []
         preds[f"csvr_nocorr_{st}"] = []
-        for sd in MAML_SEEDS:
-            preds[f"maml_nobypass_{st}_seed{sd}"] = []
+        for mode in MAML_BYPASS_MODES:
+            for sd in MAML_SEEDS:
+                preds[f"maml_{mode}_{st}_seed{sd}"] = []
 
     loader = QHDataLoader()
 
-    # Pretrain shared backbones per zone and seed
+    # Pretrain shared backbones per zone, bypass mode, and seed
     maml_managers = {}
-    for sd in MAML_SEEDS:
-        maml_managers[sd] = {}
-        for s in FEATURE_SETS:
-            mgr = MAMLManager(zone=zone, n_features=loader.n_features(zone, s), feature_set=s, seed=sd)
-            mgr.pretrain_backbone(loader, test_start="2024-01-01", verbose=False)
-            maml_managers[sd][s] = mgr
+    for mode in MAML_BYPASS_MODES:
+        maml_managers[mode] = {}
+        for sd in MAML_SEEDS:
+            maml_managers[mode][sd] = {}
+            for s in FEATURE_SETS:
+                mgr = MAMLManager(zone=zone, n_features=loader.n_features(zone, s), feature_set=s, seed=sd, bypass_mode=mode)
+                mgr.pretrain_backbone(loader, test_start="2024-01-01")
+                maml_managers[mode][sd][s] = mgr
 
     # Main interval inference loop
     for i in tqdm(range(n_total), desc=f"Zone {zone:4s}", unit="QH"):
@@ -206,10 +216,10 @@ def _run_zone(zone: str) -> None:
             # 1. Standard LASSO
             w = loader.get_window(
                 zone, q, d_str, feature_set=s,
-                lookback_days=LOOKBACK_DAYS, val_days=VAL_DAYS,
+                lookback_days=LOOKBACK_DAYS,
                 filter_zero_var=False,
             )
-            m_l, _ = train_lasso(w.X_trainval, w.y_trainval)
+            m_l, _ = train_lasso(w.X_train, w.y_train)
             p_l = float(predict_lasso(m_l, w.X_test)[0])
             preds[f"lasso_std_{st}"].append(_backtransform(p_l, w.y_mean, w.y_std, bm_eur))
 
@@ -218,11 +228,11 @@ def _run_zone(zone: str) -> None:
             corr_thresh = CSVR_CORR_THRESH_S1 if s == FEATURE_SET_MACRO else CSVR_CORR_THRESH_S2
             w_c = loader.get_window(
                 zone, q, d_str, feature_set=s,
-                lookback_days=LOOKBACK_DAYS, val_days=VAL_DAYS,
+                lookback_days=LOOKBACK_DAYS,
                 filter_zero_var=True, filter_corr=use_corr,
                 corr_threshold=corr_thresh,
             )
-            m_c = train_csvr(w_c.X_trainval, w_c.y_trainval, bm_trainval=w_c.bm_trainval)
+            m_c = train_csvr(w_c.X_train, w_c.y_train, bm_train=w_c.bm_train)
             p_c = float(predict_csvr(m_c, w_c.X_test, bm_test=bm_eur)[0])
             p_c_real = _backtransform(p_c, w_c.y_mean, w_c.y_std, bm_eur)
             preds[f"csvr_{st}"].append(p_c_real)
@@ -231,23 +241,35 @@ def _run_zone(zone: str) -> None:
             if use_corr:
                 w_c_no = loader.get_window(
                     zone, q, d_str, feature_set=s,
-                    lookback_days=LOOKBACK_DAYS, val_days=VAL_DAYS,
+                    lookback_days=LOOKBACK_DAYS,
                     filter_zero_var=True, filter_corr=False,
                 )
-                m_c_no = train_csvr(w_c_no.X_trainval, w_c_no.y_trainval, bm_trainval=w_c_no.bm_trainval)
+                m_c_no = train_csvr(w_c_no.X_train, w_c_no.y_train, bm_train=w_c_no.bm_train)
                 p_c_no = float(predict_csvr(m_c_no, w_c_no.X_test, bm_test=bm_eur)[0])
                 preds[f"csvr_nocorr_{st}"].append(_backtransform(p_c_no, w_c_no.y_mean, w_c_no.y_std, bm_eur))
             else:
                 preds[f"csvr_nocorr_{st}"].append(p_c_real)
 
-            # 3. Pure MAML (Seeds 42, 123, 999)
-            for sd in MAML_SEEDS:
-                p_scaled = maml_managers[sd][s].adapt_and_predict(
-                    X_support=w.X_trainval,
-                    y_support=w.y_trainval,
-                    X_test=w.X_test_full,
-                )
-                preds[f"maml_nobypass_{st}_seed{sd}"].append(_backtransform(p_scaled, w.y_mean, w.y_std, bm_eur))
+            # 3. MAML inference loop across configured bypass modes
+            for mode in MAML_BYPASS_MODES:
+                for sd in MAML_SEEDS:
+                    if mode == "optlasso":
+                        ''' warm-start for the linear support '''
+                        p_l_sup = m_l.predict(w.X_train)
+                        p_scaled = maml_managers[mode][sd][s].adapt_and_predict(
+                            X_support=w.X_train,
+                            y_support=w.y_train,
+                            X_test=w.X_test_full,
+                            linear_support=p_l_sup,
+                            linear_test=p_l,
+                        )
+                    else:
+                        p_scaled = maml_managers[mode][sd][s].adapt_and_predict(
+                            X_support=w.X_train,
+                            y_support=w.y_train,
+                            X_test=w.X_test_full,
+                        )
+                    preds[f"maml_{mode}_{st}_seed{sd}"].append(_backtransform(p_scaled, w.y_mean, w.y_std, bm_eur))
 
     # Rolling Inverse-MAE Ensembling & Save
     _ensemble_and_save_results(zone, preds, data, in_npz)
@@ -266,7 +288,7 @@ def get_zone_summary(zone: str) -> dict:
         ("lasso_std", "pred_lasso_ens_pure" if "pred_lasso_ens_pure" in d else "pred_lasso"),
         ("csvr_pure", "pred_csvr_ens_pure"),
         ("csvr_nocorr", "pred_csvr_nocorr_ens_pure"),
-        ("maml_byp_m015", "pred_maml_ens_pure"),
+        ("maml_byp_m015", "pred_maml_optlasso_ens_pure" if "pred_maml_optlasso_ens_pure" in d else "pred_maml_ens_pure"),
         ("maml_nobypass_single", "pred_maml_nobypass_ens_pure"),
         ("maml_nobypass_deep", "pred_maml_nobypass_deep_ens_pure"),
     ]

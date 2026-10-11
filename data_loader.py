@@ -20,25 +20,19 @@ from config import (
     BENCHMARK_COL_PATTERN, FEATURES_CSV, LOOKBACK_DAYS, MASTER_PARQUET,
     N_QH, NEIGHBOR_SAFE_VWAP_WINDOWS, FEATURE_SET_MACRO,
     FEATURE_SET_NEIGHBOR, FEATURE_SET_FUNDAMENTAL, FEATURE_SET_BALANCE, SCALERS_DIR,
-    SHIFT_QH, TARGET_COL_PATTERN, VAL_DAYS, ZONES,
+    SHIFT_QH, TARGET_COL_PATTERN, ZONES,
 )
 
 def load_feature_catalogue(
-    features_csv: str = FEATURES_CSV, feature_set: str = "S1", scenario: Optional[str] = None
+    features_csv: str = FEATURES_CSV, feature_set: str = "S1"
 ) -> tuple[dict[str, list[str]], list[str]]:
 
-    """Parse features.csv to retrieve:
-      - zone-specific active feature lists ('DE1'..'DE4') -> active feature names
-        combining national ('all') features and zone-specific ('DEx') features.
-        Only features with keep='yes' and the respective feature set (S1..S4) marked are selected.
-        Features with keep='only past products' (windows 30to45, 45to60, 60to75, 75to90)
-        are ex-post neighbor inputs constructed dynamically via NEIGHBOR_SAFE_VWAP_WINDOWS
-        with safe .shift(-k) and are never loaded directly to prevent look-ahead bias.
-      - All ex-post/realized columns across all zones requiring 2h backward shift.""" 
+    """Parse features.csv to return:
+      1. Zone-specific active feature lists for the specified feature set (S1..S4).
+      2. Ex-post columns requiring a 2h backward shift (shift_needed_2h == 'x').""" 
 
     feat = pd.read_csv(features_csv)
-    fs = (scenario or feature_set).upper()
-    active_df = feat[feat[fs].notna()]
+    active_df = feat[feat[feature_set].notna()]
 
     zone_features = {
         zone: active_df.loc[active_df["model"].isin(["all", zone]), "name"].tolist()
@@ -50,13 +44,9 @@ def load_feature_catalogue(
 # Data Container
 @dataclass
 class WindowData:
-    """Scaled training, validation, and test arrays for a single (zone, QH, test_day)."""
+    """Scaled training and test arrays for a single (zone, QH, test_day)."""
     X_train: np.ndarray
     y_train: np.ndarray
-    X_val: np.ndarray
-    y_val: np.ndarray
-    X_trainval: np.ndarray
-    y_trainval: np.ndarray
     X_test: np.ndarray
     y_test: float
     benchmark_eur: float
@@ -64,12 +54,10 @@ class WindowData:
     y_mean: float = 0.0              # Mean of y_diff on training set (for inverse transform)
     y_std: float = 1.0               # Std of y_diff on training set (for inverse transform)
     dates_train: pd.DatetimeIndex = field(default_factory=pd.DatetimeIndex)
-    dates_val: pd.DatetimeIndex = field(default_factory=pd.DatetimeIndex)
     col_mask: Optional[np.ndarray] = None
     X_train_full: Optional[np.ndarray] = None
-    X_val_full: Optional[np.ndarray] = None
     X_test_full: Optional[np.ndarray] = None
-    bm_trainval: Optional[np.ndarray] = None
+    bm_train: Optional[np.ndarray] = None
 
     def save_scaler(self, zone: str, qh_idx: int, date_str: str, folder: str = SCALERS_DIR) -> str:
         """Persist fitted StandardScaler to Models/scalers/."""
@@ -81,22 +69,21 @@ class WindowData:
 
 # Main Loader
 class QHDataLoader:
-    """Data provider for rolling QH:
-      1. Loads master_dataset.parquet and parses features.csv for active zone features.
-      2. Shifts ex-post features (actuals, flows, reserves) by 8 QH (2h) backwards.
-      3. Maps UTC timestamps to quarter-hour indices (qh_idx 0..95).
-      4. Splits data into 96 separate tables (one per QH position) for rolling slicing.
-      5. Provides get_window() to extract scaled train/val/test arrays and differenced targets. """
+    """High-performance data provider for quarter-hourly EPF:
+      1. Shifts ex-post features by 8 QH (2h) to eliminate lookahead bias.
+      2. Builds leakage-safe neighbor trajectories and spreads (S2).
+      3. Loads partition feature sets S1, S3, S4 directly from features.csv.
+      4. Maps UTC timestamps to delivery date and quarter-hour index (0..95).
+      5. Splits data into 96 separate tables (one per QH position) for rolling slicing.
+      Provides get_window() to extract scaled train/test arrays and differenced targets."""
 
     def __init__(
         self,
         parquet_path: str = MASTER_PARQUET,
         features_csv: str = FEATURES_CSV,
         start_delivery_date: str = "2021-10-01",
-        verbose: bool = False,
     ):
         self.parquet_path = parquet_path
-        self.verbose = verbose
         self.start_delivery_date = start_delivery_date
 
         feat_df = pd.read_csv(features_csv)
@@ -110,32 +97,31 @@ class QHDataLoader:
         if self._shift_cols:
             df[self._shift_cols] = df[self._shift_cols].shift(SHIFT_QH)
 
-        # 2. Build leakage-safe neighbor trajectories (national + regional)
-        df, self._neighbor_features = self._build_neighbor_features(df)
+        # 2. Build neighbor trajectories (national + regional)
+        df, self._s2_features = self._build_neighbor_features(df)
 
         # 3. Load feature sets S1, S3, S4 directly from features.csv
-        # Pre-filter valid features once: drop targets, unobserved columns, and Date
+        # Pre-filter valid features: strictly require tag == "input"
         valid_df = feat_df[
             feat_df["name"].isin(available_cols)
-            & ~feat_df["name"].str.endswith(("VWAP_0to30", "VWAP_0to15", "VWAP_15to30"))
-            & ~feat_df["name"].isin(["Date", "VWAP_0to30"])
+            & (feat_df["tag"] == "input")
         ]
 
         self._s1_features: dict[str, list[str]] = {}
         self._s3_features: dict[str, list[str]] = {}
-        self._balance_features: dict[str, list[str]] = {}
+        self._s4_features: dict[str, list[str]] = {}
 
         for zone in ZONES:
             z_df = valid_df[valid_df["model"].isin(["all", zone])]
             bench = BENCHMARK_COL_PATTERN.format(zone=zone)
 
             self._s1_features[zone] = z_df.loc[z_df["S1"].notna(), "name"].tolist()
-            self._balance_features[zone] = [c for c in z_df.loc[z_df["S4"].notna(), "name"] if c != bench]
             s3_raw = [c for c in z_df.loc[z_df["S3"].notna(), "name"] if c != bench]
             self._s3_features[zone] = [bench] + s3_raw if bench in available_cols else s3_raw
+            self._s4_features[zone] = [c for c in z_df.loc[z_df["S4"].notna(), "name"] if c != bench]
 
         self._zone_features = {
-            z: sorted(set(self._s1_features[z] + self._neighbor_features[z] + self._s3_features[z] + self._balance_features[z]))
+            z: sorted(set(self._s1_features[z] + self._s2_features[z] + self._s3_features[z] + self._s4_features[z]))
             for z in ZONES
         }
 
@@ -144,15 +130,16 @@ class QHDataLoader:
         df["_delivery_date"] = df["Date"].dt.date
 
         if start_delivery_date:
-            df = df[df["_delivery_date"] >= pd.to_datetime(start_delivery_date).date()].reset_index(drop=True)
+            df = df[df["Date"] >= pd.to_datetime(start_delivery_date, utc=True)].reset_index(drop=True)
 
-        self._qh_tables: dict[int, pd.DataFrame] = {
-            q: df[df["_qh_idx"] == q].sort_values("Date").reset_index(drop=True)
-            for q in range(N_QH)
-        }
-        self._qh_dates: dict[int, np.ndarray] = {
-            q: self._qh_tables[q]["_delivery_date"].values for q in range(N_QH)
-        }
+        # 5. Split into 96 separate tables (one per QH position)
+        grouped = dict(tuple(df.groupby("_qh_idx", sort=True)))
+        self._qh_tables: dict[int, pd.DataFrame] = {}
+        self._qh_dates: dict[int, np.ndarray] = {}
+        for q in range(N_QH):
+            sub = grouped[q].reset_index(drop=True)
+            self._qh_tables[q] = sub
+            self._qh_dates[q] = sub["_delivery_date"].values
 
     @staticmethod
     def _build_neighbor_features(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, list[str]]]:
@@ -183,12 +170,14 @@ class QHDataLoader:
                     if nat_s is not None:
                         val = val.fillna(nat_s)
 
+                    # Intertemporal spread: neighbor price vs own naive benchmark (k=0)
                     price_col = f"{pfx}_VWAP_{win}"
                     spread_col = f"{pfx}_spread"
                     nb_series[price_col] = val
                     nb_series[spread_col] = val - bench
                     neighbor_features[zone].extend([price_col, spread_col])
 
+                    # Cross-zone basis spread: regional price vs national benchmark
                     if nat_s is not None:
                         cross_col = f"{zone}_vs_DE_nb_k{k:+d}"
                         nb_series[cross_col] = val - nat_s
@@ -213,7 +202,6 @@ class QHDataLoader:
         test_date: str | pd.Timestamp,
         feature_set: str = FEATURE_SET_MACRO,
         lookback_days: int = LOOKBACK_DAYS,
-        val_days: int = VAL_DAYS,
         save_scaler: bool = False,
         filter_zero_var: bool = True,
         filter_corr: bool = False,
@@ -228,7 +216,7 @@ class QHDataLoader:
 
         # 1. Contiguous slice: Lookback + test row in one go
         w_df = qh_df.iloc[test_idx - lookback_days : test_idx + 1]
-        n_train = len(w_df) - 1 - val_days
+        n_train = len(w_df) - 1
         feat_cols = self.feature_names(zone, feature_set=feature_set)
         target_col = TARGET_COL_PATTERN.format(zone=zone)
         bench_col = BENCHMARK_COL_PATTERN.format(zone=zone)
@@ -264,23 +252,17 @@ class QHDataLoader:
         window = WindowData(
             X_train=X_masked[:n_train],
             y_train=y_std_all[:n_train],
-            X_val=X_masked[n_train:-1],
-            y_val=y_std_all[n_train:-1],
-            X_trainval=X_masked[:-1],
-            y_trainval=y_std_all[:-1],
             X_test=X_masked[-1:],
             y_test=float(y_std_all[-1]),
             benchmark_eur=float(bm_raw[-1]),
             scaler_X=scaler,
             y_mean=y_mean,
             y_std=y_std,
-            dates_train=hist_dates[:n_train],
-            dates_val=hist_dates[n_train:],
+            dates_train=hist_dates,
             col_mask=col_mask,
             X_train_full=X_full[:n_train],
-            X_val_full=X_full[n_train:-1],
             X_test_full=X_full[-1:],
-            bm_trainval=bm_raw[:-1],
+            bm_train=bm_raw[:-1],
         )
         if save_scaler:
             window.save_scaler(zone, qh_idx, str(target_date))
@@ -290,17 +272,17 @@ class QHDataLoader:
         """Return active feature names for the specified zone and feature set."""
         if zone:
             bench = BENCHMARK_COL_PATTERN.format(zone=zone)
-            nb = self._neighbor_features.get(zone, [])
-            bal = self._balance_features.get(zone, [])
+            s2 = self._s2_features.get(zone, [])
+            s4 = self._s4_features.get(zone, [])
             mapping = {
                 FEATURE_SET_MACRO: self._s1_features.get(zone, []),
                 "S1": self._s1_features.get(zone, []),
-                FEATURE_SET_NEIGHBOR: [bench] + nb if bench not in nb else nb,
-                "S2": [bench] + nb if bench not in nb else nb,
+                FEATURE_SET_NEIGHBOR: [bench] + s2 if bench not in s2 else s2,
+                "S2": [bench] + s2 if bench not in s2 else s2,
                 FEATURE_SET_FUNDAMENTAL: self._s3_features.get(zone, []),
                 "S3": self._s3_features.get(zone, []),
-                FEATURE_SET_BALANCE: [bench] + bal if bench not in bal else bal,
-                "S4": [bench] + bal if bench not in bal else bal,
+                FEATURE_SET_BALANCE: [bench] + s4 if bench not in s4 else s4,
+                "S4": [bench] + s4 if bench not in s4 else s4,
             }
             return mapping.get(feature_set, self._s1_features.get(zone, []))
 

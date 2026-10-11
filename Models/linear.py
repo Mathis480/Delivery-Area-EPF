@@ -18,9 +18,9 @@ from config import LASSO_CV_DAYS, LASSO_MAX_ITER, LASSO_TOL, SCALERS_DIR, TRAINE
 # Ordinary Least Squares (LR)
 # ---------------------------------------------------------------------------
 
-def train_lr(X_trainval: np.ndarray, y_trainval: np.ndarray) -> LinearRegression:
+def train_lr(X_train: np.ndarray, y_train: np.ndarray) -> LinearRegression:
     model = LinearRegression(fit_intercept=True, n_jobs=1)
-    model.fit(X_trainval, y_trainval)
+    model.fit(X_train, y_train)
     return model
 
 def predict_lr(model: LinearRegression, X: np.ndarray) -> np.ndarray:
@@ -52,13 +52,13 @@ def _build_temporal_cv_splits(
     return splits
 
 def train_lasso(
-    X_trainval: np.ndarray,
-    y_trainval: np.ndarray,
+    X_train: np.ndarray,
+    y_train: np.ndarray,
     alpha: float | None = None,
 ) -> tuple[Lasso, float]:
     """
     LASSO with LassoLarsCV alpha selection (recalibrated every call).
-    The final model is fitted on the full trainval set with the selected alpha.
+    The final model is fitted on the full training set with the selected alpha.
     """
     if alpha is not None:
         model = Lasso(
@@ -70,12 +70,12 @@ def train_lasso(
         )
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            model.fit(X_trainval, y_trainval)
+            model.fit(X_train, y_train)
         return model, alpha
 
-    # Build temporal expanding-window CV splits on trainval
-    n_trainval = len(X_trainval)
-    cv_splits = _build_temporal_cv_splits(n_trainval, cv_days=LASSO_CV_DAYS)
+    # Build temporal expanding-window CV splits on training set
+    n_samples = len(X_train)
+    cv_splits = _build_temporal_cv_splits(n_samples, cv_days=LASSO_CV_DAYS)
 
     cv_model = LassoLarsCV(
         cv=cv_splits,
@@ -86,12 +86,12 @@ def train_lasso(
     try:
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            cv_model.fit(X_trainval, y_trainval)
+            cv_model.fit(X_train, y_train)
         best_alpha = float(cv_model.alpha_)
     except Exception:
         best_alpha = 0.01
 
-    # Refit final model on full trainval set with the selected alpha
+    # Refit final model on full training set with the selected alpha
     final_model = Lasso(
         alpha=best_alpha,
         max_iter=LASSO_MAX_ITER,
@@ -101,7 +101,7 @@ def train_lasso(
     )
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore")
-        final_model.fit(X_trainval, y_trainval)
+        final_model.fit(X_train, y_train)
 
     return final_model, best_alpha
 

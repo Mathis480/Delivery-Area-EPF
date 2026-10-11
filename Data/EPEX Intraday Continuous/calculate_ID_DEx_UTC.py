@@ -37,7 +37,6 @@ LEAD_TIME_INTERVALS = [
 ][::-1]
 
 def calculate_vwap(df_subset: pd.DataFrame) -> float:
-    """Calculate Volume-Weighted Average Price (VWAP) in EUR/MWh, or NaN if zero volume."""
     vol = df_subset['Volume'].sum()
     if vol == 0:
         return np.nan
@@ -45,7 +44,6 @@ def calculate_vwap(df_subset: pd.DataFrame) -> float:
 
 
 def calculate_total_volume(df_subset: pd.DataFrame) -> float:
-    """Calculate total traded volume in MWh."""
     try:
         return np.round(df_subset['Volume'].sum(), 2)
     except Exception:
@@ -53,7 +51,6 @@ def calculate_total_volume(df_subset: pd.DataFrame) -> float:
 
 
 def calculate_total_trades(df_subset: pd.DataFrame) -> int:
-    """Count total executed trades."""
     try:
         return len(df_subset)
     except Exception:
@@ -92,51 +89,33 @@ def calculate_metrics(
     window_idx: int, 
     interval_name: str, 
     window_names: list
-) -> list:
+) -> dict:
     """Compute 9 window metrics; forward-fills VWAP and zeroes volumes if no trades occurred."""
-    temp_list = []
     if df.empty:
-        if len(window_metrics_list) == 0:
-            # First window (345-360m prior) has no prior trade to forward-fill from -> NaN
-            temp_list.append({
-                'VWAP_' + interval_name: np.nan,
-                'VWAP_total_volume_' + interval_name: 0,
-                'VWAP_total_trades_' + interval_name: 0,
-                'id_balance_' + interval_name: 0,
-                'id_balance_to_DE1_' + interval_name: 0,
-                'id_balance_to_DE2_' + interval_name: 0,
-                'id_balance_to_DE3_' + interval_name: 0,
-                'id_balance_to_DE4_' + interval_name: 0,
-                'id_trade_to_self_' + interval_name: 0
-            })
-        else:
-            # Forward-fill previous known VWAP from earlier lead-time window (if any)
-            prev_price = window_metrics_list[-1].get(f'VWAP_{window_names[window_idx-1]}', np.nan)
-            temp_list.append({
-                'VWAP_' + interval_name: prev_price,
-                'VWAP_total_volume_' + interval_name: 0,
-                'VWAP_total_trades_' + interval_name: 0,
-                'id_balance_' + interval_name: 0,
-                'id_balance_to_DE1_' + interval_name: 0,
-                'id_balance_to_DE2_' + interval_name: 0,
-                'id_balance_to_DE3_' + interval_name: 0,
-                'id_balance_to_DE4_' + interval_name: 0,
-                'id_trade_to_self_' + interval_name: 0
-            })
-    else:
-        # At least one or more trades exist: calculate exact weighted metrics
-        temp_list.append({
-            'VWAP_' + interval_name: calculate_vwap(df),
-            'VWAP_total_volume_' + interval_name: calculate_total_volume(df),
-            'VWAP_total_trades_' + interval_name: calculate_total_trades(df),
-            'id_balance_' + interval_name: calculate_idbalance(df),
-            'id_balance_to_DE1_' + interval_name: calculate_idbalance_to_zone(df, 'DE1'),
-            'id_balance_to_DE2_' + interval_name: calculate_idbalance_to_zone(df, 'DE2'),
-            'id_balance_to_DE3_' + interval_name: calculate_idbalance_to_zone(df, 'DE3'),
-            'id_balance_to_DE4_' + interval_name: calculate_idbalance_to_zone(df, 'DE4'),
-            'id_trade_to_self_' + interval_name: calculate_idbalance_to_self(df)
-        })
-    return temp_list
+        prev_vwap = window_metrics_list[-1].get(f'VWAP_{window_names[window_idx-1]}', np.nan) if window_metrics_list else np.nan
+        return {
+            f'VWAP_{interval_name}': prev_vwap,
+            f'VWAP_total_volume_{interval_name}': 0,
+            f'VWAP_total_trades_{interval_name}': 0,
+            f'id_balance_{interval_name}': 0,
+            f'id_balance_to_DE1_{interval_name}': 0,
+            f'id_balance_to_DE2_{interval_name}': 0,
+            f'id_balance_to_DE3_{interval_name}': 0,
+            f'id_balance_to_DE4_{interval_name}': 0,
+            f'id_trade_to_self_{interval_name}': 0,
+        }
+
+    return {
+        f'VWAP_{interval_name}': calculate_vwap(df),
+        f'VWAP_total_volume_{interval_name}': calculate_total_volume(df),
+        f'VWAP_total_trades_{interval_name}': calculate_total_trades(df),
+        f'id_balance_{interval_name}': calculate_idbalance(df),
+        f'id_balance_to_DE1_{interval_name}': calculate_idbalance_to_zone(df, 'DE1'),
+        f'id_balance_to_DE2_{interval_name}': calculate_idbalance_to_zone(df, 'DE2'),
+        f'id_balance_to_DE3_{interval_name}': calculate_idbalance_to_zone(df, 'DE3'),
+        f'id_balance_to_DE4_{interval_name}': calculate_idbalance_to_zone(df, 'DE4'),
+        f'id_trade_to_self_{interval_name}': calculate_idbalance_to_self(df),
+    }
 
 
 def classify_trade_direction(delivery_area: str, side: str, target_area: str) -> str:
@@ -151,7 +130,6 @@ def classify_trade_direction(delivery_area: str, side: str, target_area: str) ->
 
 
 def process_single_trade_file(args: tuple) -> pd.DataFrame:
-    """Process a single daily trade file into lead-time window aggregates."""
     file_path, target_area = args
     try:  
         # 1. Read CSV and strip whitespace from headers.
@@ -219,15 +197,14 @@ def process_single_trade_file(args: tuple) -> pd.DataFrame:
         # 7.1 Aggregate metrics across all delivery quarter-hours
         delivery_records = []
         for delivery_start in delivery_starts:
+            record = {'DeliveryStart': delivery_start}
             window_metrics_list = []
             for j, interval_name in enumerate(LEAD_TIME_WINDOW_NAMES):
                 df_sub = df_binned_trades[interval_name][df_binned_trades[interval_name]['DeliveryStart'] == delivery_start]
                 metrics = calculate_metrics(df_sub, window_metrics_list, j, interval_name, LEAD_TIME_WINDOW_NAMES)
-                window_metrics_list.extend(metrics)
-                
-            flat_dict = {k: v for d in window_metrics_list for k, v in d.items()}
-            flat_dict['DeliveryStart'] = delivery_start
-            delivery_records.append(flat_dict)
+                window_metrics_list.append(metrics)
+                record.update(metrics)
+            delivery_records.append(record)
 
         if delivery_records:
             return pd.DataFrame(delivery_records)
@@ -280,7 +257,6 @@ def calculate_id_da_utc(
     source_dir: str = None, 
     output_dir: str = None
 ) -> None:
-    """Pre-aggregate EPEX continuous trades for a specific year and target area."""
     pd.options.mode.chained_assignment = None
     base_dir = os.path.dirname(os.path.abspath(__file__))
     if output_dir is None:

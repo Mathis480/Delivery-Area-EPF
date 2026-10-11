@@ -12,38 +12,23 @@ import warnings
 from typing import Optional
 
 import numpy as np
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # Strictly CPU execution to avoid multi-process GPU conflicts
-import logging
-logging.getLogger("tensorflow").setLevel(logging.ERROR)
+
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
 import tensorflow as tf
-tf.get_logger().setLevel(logging.ERROR)
+tf.get_logger().setLevel("ERROR")
 from tensorflow import keras
 from tensorflow.keras import layers, regularizers
 from scipy.spatial.distance import cdist
-from sklearn.linear_model import Ridge, Lasso, LassoLarsCV
 
+from Models.linear import train_lasso
 from config import (
-    MAML_ACTIVATION,
-    MAML_BACKBONE_BATCH,
-    MAML_DROPOUT,
-    MAML_HIDDEN_SIZES,
-    MAML_INNER_LR,
-    MAML_INNER_STEPS,
-    MAML_L1_REG,
-    MAML_META_EPOCHS,
-    MAML_META_LR,
-    MAML_PROX_SHRINK,
-    MAML_CLIP_RESIDUAL,
-    MAML_USE_LINEAR_BYPASS,
-    MAML_SUPPORT_SELECTION,
-    MAML_SUPPORT_K,
-    MAML_SUPPORT_WEIGHTING,
-    MAML_KERNEL_TAU,
-    N_QH,
-    TRAINED_MODELS_DIR,
-    FEATURE_SET_MACRO,
+    MAML_ACTIVATION, MAML_BACKBONE_BATCH, MAML_DROPOUT, MAML_HIDDEN_SIZES,
+    MAML_INNER_LR, MAML_INNER_STEPS, MAML_L1_REG, MAML_META_EPOCHS,
+    MAML_META_LR, MAML_PROX_SHRINK, MAML_BYPASS_SATURATION_M,
+    MAML_SUPPORT_SELECTION, MAML_SUPPORT_K, MAML_SUPPORT_WEIGHTING,
+    MAML_KERNEL_TAU, N_QH, TRAINED_MODELS_DIR, FEATURE_SET_MACRO,
 )
 
 warnings.filterwarnings("ignore")
@@ -78,7 +63,6 @@ def build_maml_net(
 
 
 class MAMLManager:
-    """Manages the shared MAML residual backbone and inner-loop adaptation."""
 
     def __init__(
         self,
@@ -86,40 +70,33 @@ class MAMLManager:
         n_features: int,
         feature_set: str = FEATURE_SET_MACRO,
         seed: int = 42,
-        bypass_mode: Optional[str] = None,
+        bypass_mode: str = "nobypass",
     ):
         self.zone = zone
         self.n_features = n_features
         self.feature_set = feature_set
         self.seed = seed
-        self.n_qh = N_QH
-        self.use_linear_bypass = MAML_USE_LINEAR_BYPASS
-        if bypass_mode is not None:
-            self.bypass_mode = bypass_mode
-        else:
-            self.bypass_mode = "optlasso" if self.use_linear_bypass else "nobypass"
-        self.hidden_sizes = MAML_HIDDEN_SIZES
-        self.dropout = MAML_DROPOUT
-        self.l1_reg = MAML_L1_REG
-        self.activation = MAML_ACTIVATION
+        if bypass_mode not in ("nobypass", "optlasso"):
+            raise ValueError(f"Unknown bypass_mode: '{bypass_mode}'. Expected 'nobypass' or 'optlasso'.")
+        self.bypass_mode = bypass_mode
 
         self.cache_path = os.path.join(TRAINED_MODELS_DIR, "maml_cache")
         os.makedirs(self.cache_path, exist_ok=True)
 
         self._backbone_weights: list[np.ndarray] | None = None
-        self._working_model = build_maml_net(
-            n_features, self.hidden_sizes, self.dropout, self.l1_reg, self.activation, seed=seed
-        )
+        self._working_model = build_maml_net(n_features, seed=seed)
         self._variables = self._working_model.trainable_variables
+        self._lr_t = tf.constant(MAML_INNER_LR, dtype=tf.float32)
+        self._prox_t = tf.constant(MAML_PROX_SHRINK, dtype=tf.float32)
 
     def _backbone_path(self, quarter_tag: Optional[str] = None) -> str:
         """Constructs path for saved shared backbone weights."""
         q_suffix = f"_{quarter_tag}" if quarter_tag else ""
         bp_suffix = f"_{self.bypass_mode}" if self.bypass_mode else ""
-        h_str = "-".join(map(str, self.hidden_sizes))
+        h_str = "-".join(map(str, MAML_HIDDEN_SIZES))
         filename = (
             f"backbone_{self.zone}_{self.feature_set}{bp_suffix}"
-            f"_h{h_str}_d{int(self.dropout * 100)}_l1{self.l1_reg:.0e}{q_suffix}_seed{self.seed}.pkl"
+            f"_h{h_str}_d{int(MAML_DROPOUT * 100)}_l1{MAML_L1_REG:.0e}{q_suffix}_seed{self.seed}.pkl"
         )
         return os.path.join(self.cache_path, filename)
 
@@ -128,26 +105,11 @@ class MAMLManager:
         if self.bypass_mode == "nobypass":
             return np.concatenate([w.y_train for w in valid_windows]).astype(np.float32)
 
-        if self.bypass_mode == "optlasso":
-            r_list = []
-            for w in valid_windows:
-                n_tr = len(w.X_train_full)
-                cv_splits = [(list(range(n_tr - 14)), list(range(n_tr - 14, n_tr)))]
-                m_cv = LassoLarsCV(cv=cv_splits, max_iter=200, fit_intercept=True).fit(w.X_train_full, w.y_train)
-                mean_mse = np.mean(m_cv.mse_path_, axis=1)
-                se_mse = np.std(m_cv.mse_path_, axis=1, ddof=1) if m_cv.mse_path_.shape[1] > 1 else 0.0
-                target = np.min(mean_mse) + se_mse
-                valid = np.where(mean_mse <= target)[0]
-                alpha_1se = m_cv.cv_alphas_[valid[-1]] if len(valid) > 0 else m_cv.alpha_
-                m_final = Lasso(alpha=alpha_1se, max_iter=200, fit_intercept=True).fit(w.X_train_full, w.y_train)
-                r_list.append(w.y_train - m_final.predict(w.X_train_full))
-            return np.concatenate(r_list).astype(np.float32)
-
-        # Fallback for legacy Ridge bypass
-        return np.concatenate([
-            w.y_train - Ridge(alpha=100.0).fit(w.X_train_full, w.y_train).predict(w.X_train_full)
-            for w in valid_windows
-        ]).astype(np.float32)
+        r_list = []
+        for w in valid_windows:
+            m_lasso, _ = train_lasso(w.X_train_full, w.y_train)
+            r_list.append(w.y_train - m_lasso.predict(w.X_train_full))
+        return np.concatenate(r_list).astype(np.float32)
 
     def pretrain_backbone(
         self,
@@ -155,9 +117,7 @@ class MAMLManager:
         test_start: str = "2024-01-01",
         quarter_tag: Optional[str] = None,
         lookback_days: int = 822,
-        val_days: int = 30,
         meta_epochs: int = MAML_META_EPOCHS,
-        verbose: bool = True,
         force_retrain: bool = False,
     ) -> None:
         """Loads or trains the shared MAML backbone across QH positions with seed-specific checkpoint."""
@@ -166,18 +126,14 @@ class MAMLManager:
             with open(backbone_path, "rb") as f:
                 self._backbone_weights = pickle.load(f)
             self._working_model.set_weights(self._backbone_weights)
-            if verbose:
-                print(f"[{self.zone} {self.feature_set} seed={self.seed}] Loaded cached backbone: {os.path.basename(backbone_path)}")
             return
 
         np.random.seed(self.seed)
         tf.random.set_seed(self.seed)
-        self._working_model = build_maml_net(
-            self.n_features, self.hidden_sizes, self.dropout, self.l1_reg, self.activation, seed=self.seed
-        )
+        self._working_model = build_maml_net(self.n_features, seed=self.seed)
         self._variables = self._working_model.trainable_variables
 
-        windows = [loader.get_window(self.zone, q, test_start, feature_set=self.feature_set, lookback_days=lookback_days, val_days=val_days) for q in range(self.n_qh)]
+        windows = [loader.get_window(self.zone, q, test_start, feature_set=self.feature_set, lookback_days=lookback_days) for q in range(N_QH)]
         valid_w = [w for w in windows if w is not None and w.X_train_full is not None]
         X_all = np.vstack([w.X_train_full for w in valid_w]).astype(np.float32)
         r_all = self._compute_backbone_targets(valid_w)
@@ -186,8 +142,6 @@ class MAMLManager:
         self._backbone_weights = self._working_model.get_weights()
         with open(backbone_path, "wb") as f:
             pickle.dump(self._backbone_weights, f)
-        if verbose:
-            print(f"[{self.zone} {self.feature_set} seed={self.seed}] Pretrained and saved backbone: {os.path.basename(backbone_path)}")
 
     def set_backbone_weights(self, weights: list[np.ndarray]) -> None:
         """Dynamically update shared backbone weights (e.g. for quarterly rolling updates)."""
@@ -202,26 +156,35 @@ class MAMLManager:
         support_k: int = MAML_SUPPORT_K,
         selection_mode: str = MAML_SUPPORT_SELECTION,
     ) -> tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
-        """Selects K regime-nearest historical days and computes soft-kernel weights."""
-        y_vec = y_support.ravel().astype(np.float32)[:, None]
-        if selection_mode == "regime_l1" and len(X_support) > support_k:
+        """Select K support days for fast inner-loop adaptation."""
+        n_avail = len(X_support)
+        if n_avail < support_k:
+            raise ValueError(f"Insufficient support samples: available={n_avail}, required K={support_k}")
+
+        if selection_mode == "regime_l1":
             dists = cdist(X_support, X_test.reshape(1, -1), metric="cityblock").ravel()
             sel_idx = np.argsort(dists)[:support_k]
-            X_s = tf.cast(X_support[sel_idx], tf.float32)
-            y_s = tf.cast(y_vec[sel_idx], tf.float32)
+
             if MAML_SUPPORT_WEIGHTING == "soft_kernel":
                 d_sel = dists[sel_idx]
                 scale = max(float(np.std(d_sel)), 1e-4) * MAML_KERNEL_TAU
-                w_k = np.exp(-(d_sel - d_sel[0]) / scale)
-                w_k = (w_k / np.sum(w_k)).astype(np.float32)[:, None]
-                weights_s = tf.cast(w_k, tf.float32)
+                w = np.exp(-(d_sel - d_sel[0]) / scale)
+                weights = (w / np.sum(w))[:, None]
+            elif MAML_SUPPORT_WEIGHTING == "uniform":
+                weights = np.full((support_k, 1), 1.0 / support_k, dtype=np.float32)
             else:
-                weights_s = tf.ones((support_k, 1), dtype=tf.float32) / float(support_k)
+                raise ValueError(f"Unknown MAML support weighting: '{MAML_SUPPORT_WEIGHTING}'. Expected 'soft_kernel' or 'uniform'")
+
+        elif selection_mode == "recent":
+            sel_idx = np.arange(n_avail - support_k, n_avail)
+            weights = np.full((support_k, 1), 1.0 / support_k, dtype=np.float32)
+
         else:
-            k = min(support_k, len(X_support))
-            X_s = tf.cast(X_support[-k:], tf.float32)
-            y_s = tf.cast(y_vec[-k:], tf.float32)
-            weights_s = tf.ones((k, 1), dtype=tf.float32) / float(k)
+            raise ValueError(f"Unknown MAML support selection mode: '{selection_mode}'. Supported modes: 'regime_l1', 'recent'")
+
+        X_s = tf.constant(X_support[sel_idx], dtype=tf.float32)
+        y_s = tf.constant(y_support.ravel()[sel_idx, None], dtype=tf.float32)
+        weights_s = tf.constant(weights, dtype=tf.float32)
         return X_s, y_s, weights_s
 
     def adapt_and_predict(
@@ -229,32 +192,34 @@ class MAMLManager:
         X_support: np.ndarray,
         y_support: np.ndarray,
         X_test: np.ndarray,
+        linear_support: Optional[np.ndarray] = None,
+        linear_test: Optional[float] = None,
     ) -> float:
-        """Fast compiled inner-loop adaptation starting from warm-start backbone.
-
-        Resets model to shared backbone, selects regime-nearest support days,
-        and executes compiled gradient adaptation.
-        """
+        """Fast compiled inner-loop adaptation starting from warm-start backbone."""
         if self._backbone_weights is None:
             raise RuntimeError(f"[MAML {self.zone}] Shared backbone not initialized.")
 
-        # 1. Reset model to shared backbone
         self._working_model.set_weights(self._backbone_weights)
 
-        # 2. Select K regime-nearest days and soft-kernel weights
-        X_s, y_s, weights_s = self._select_support_set(X_support, y_support, X_test)
+        if self.bypass_mode == "optlasso":
+            if linear_support is None or linear_test is None:
+                raise ValueError("Bypass mode 'optlasso' requires linear_support and linear_test.")
+            m = MAML_BYPASS_SATURATION_M
+            p_lin_sup = m * np.tanh(linear_support / m) if m else linear_support
+            p_lin_test = float(m * np.tanh(linear_test / m) if m else linear_test)
+            y_target = y_support.ravel() - p_lin_sup.ravel()
+        else:
+            p_lin_test = 0.0
+            y_target = y_support.ravel()
 
-        # 3. Fast compiled inner adaptation and prediction in single TF graph
-        lr_t = tf.constant(MAML_INNER_LR, tf.float32)
-        prox_t = tf.constant(MAML_PROX_SHRINK, tf.float32)
-        x_te = tf.cast(X_test.reshape(1, -1), tf.float32)
-        pred = float(self._run_inner_loop_graph(X_s, y_s, x_te, lr_t, prox_t, weights_s).numpy().ravel()[0])
+        X_s, y_s, weights_s = self._select_support_set(X_support, y_target, X_test)
+        x_te = tf.constant(X_test.reshape(1, -1), dtype=tf.float32)
+        pred = float(self._run_inner_loop_graph(X_s, y_s, x_te, self._lr_t, self._prox_t, weights_s).numpy()[0, 0])
 
-        # 4. Optional residual clipping if configured
-        if MAML_CLIP_RESIDUAL is not None and MAML_CLIP_RESIDUAL > 0:
-            pred = float(np.clip(pred, -MAML_CLIP_RESIDUAL, MAML_CLIP_RESIDUAL))
+        if self.bypass_mode == "optlasso":
+            pred += p_lin_test
 
-        return pred
+        return float(pred)
 
     @tf.function(reduce_retracing=True)
     def _run_inner_loop_graph(
@@ -278,7 +243,7 @@ class MAMLManager:
             for v, g in zip(self._variables, grads):
                 if g is not None:
                     v.assign_sub(lr * g)
-                    if prox_shrink > 0.0:
+                    if prox_shrink > 0.0 and "kernel" in v.name:
                         v.assign(tf.sign(v) * tf.maximum(0.0, tf.abs(v) - prox_shrink))
 
         return self._working_model(xte, training=False)
