@@ -596,17 +596,6 @@ class TestModelAPIContracts(unittest.TestCase):
         pred = predict_lasso(model, np.random.randn(1, 5))
         self.assertEqual(pred.shape, (1,))
 
-    def test_lr_train_predict(self):
-        from Models.linear import train_lr, predict_lr, get_lr_weights
-        np.random.seed(42)
-        X = np.random.randn(50, 5)
-        y = np.random.randn(50)
-        model = train_lr(X, y)
-        pred = predict_lr(model, np.random.randn(1, 5))
-        self.assertEqual(pred.shape, (1,))
-        coef, intercept = get_lr_weights(model)
-        self.assertEqual(coef.shape, (5,))
-
     def test_maml_adapt_and_predict(self):
         """MAML adapt_and_predict interface test with synthetic support/test sets."""
         from Models.maml_nn import MAMLManager
@@ -625,7 +614,6 @@ class TestModelAPIContracts(unittest.TestCase):
     def test_init_exports_all(self):
         """Models.__init__ must export all documented functions."""
         from Models import (
-            train_lr, predict_lr, get_lr_weights,
             train_lasso, predict_lasso, get_lasso_weights,
             train_csvr, predict_csvr, CSVRModel,
             MAMLManager, build_maml_net,
@@ -721,11 +709,6 @@ class TestFunctionUsage(unittest.TestCase):
                             usages.append(f)
         return usages
 
-    def test_get_lr_weights_is_used(self):
-        usages = self._find_usages("get_lr_weights")
-        # Should be used in backtest for MAML linear bypass initialization
-        self.assertTrue(len(usages) > 1,  # at least definition + one usage
-                        "get_lr_weights appears unused outside its definition")
 
     def test_get_lasso_weights_defined(self):
         """get_lasso_weights is exported but check if used."""

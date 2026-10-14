@@ -1,5 +1,5 @@
 """Models package for EPF Delivery Area forecasting."""
-from Models.linear import train_lr, predict_lr, get_lr_weights, train_lasso, predict_lasso, get_lasso_weights
+from Models.linear import train_lasso, predict_lasso, get_lasso_weights
 from Models.csvr import train_csvr, predict_csvr, CSVRModel
 from Models.ensemble import compute_rolling_weighted_average, dm_test
 
@@ -14,9 +14,6 @@ def __getattr__(name: str):
 
 
 __all__ = [
-    "train_lr",
-    "predict_lr",
-    "get_lr_weights",
     "train_lasso",
     "predict_lasso",
     "get_lasso_weights",
@@ -28,4 +25,3 @@ __all__ = [
     "compute_rolling_weighted_average",
     "dm_test",
 ]
-

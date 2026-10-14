@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import os
 import pickle
-import warnings
 import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
@@ -20,23 +19,21 @@ from config import (
     BENCHMARK_COL_PATTERN, FEATURES_CSV, LOOKBACK_DAYS, MASTER_PARQUET,
     N_QH, NEIGHBOR_SAFE_VWAP_WINDOWS, FEATURE_SET_MACRO,
     FEATURE_SET_NEIGHBOR, FEATURE_SET_FUNDAMENTAL, FEATURE_SET_BALANCE, SCALERS_DIR,
-    SHIFT_QH, TARGET_COL_PATTERN, ZONES,
+    SHIFT_QH, TARGET_COL_PATTERN, ZONES, S4_USE_STRUCTURED_RATIOS,
 )
 
 def load_feature_catalogue(
     features_csv: str = FEATURES_CSV, feature_set: str = "S1"
 ) -> tuple[dict[str, list[str]], list[str]]:
-
     """Parse features.csv to return:
       1. Zone-specific active feature lists for the specified feature set (S1..S4).
-      2. Ex-post columns requiring a 2h backward shift (shift_needed_2h == 'x').""" 
-
+      2. Ex-post columns requiring a 2h backward shift (shift_needed_2h == 'x')."""
     feat = pd.read_csv(features_csv)
     active_df = feat[feat[feature_set].notna()]
 
     zone_features = {
         zone: active_df.loc[active_df["model"].isin(["all", zone]), "name"].tolist()
-        for zone in ["DE1", "DE2", "DE3", "DE4"]
+        for zone in ZONES
     }
     shift_cols = feat.loc[feat["shift_needed_2h"] == "x", "name"].tolist()
     return zone_features, shift_cols
@@ -100,7 +97,13 @@ class QHDataLoader:
         # 2. Build neighbor trajectories (national + regional)
         df, self._s2_features = self._build_neighbor_features(df)
 
-        # 3. Load feature sets S1, S3, S4 directly from features.csv
+        # 3. Build structured balance features (S4) if enabled
+        if S4_USE_STRUCTURED_RATIOS:
+            df, self._s4_features = self._build_balance_features(df)
+        else:
+            self._s4_features = {}
+
+        # 4. Load feature sets S1, S3 (and S4 legacy fallback) directly from features.csv
         # Pre-filter valid features: strictly require tag == "input"
         valid_df = feat_df[
             feat_df["name"].isin(available_cols)
@@ -109,30 +112,27 @@ class QHDataLoader:
 
         self._s1_features: dict[str, list[str]] = {}
         self._s3_features: dict[str, list[str]] = {}
-        self._s4_features: dict[str, list[str]] = {}
 
         for zone in ZONES:
             z_df = valid_df[valid_df["model"].isin(["all", zone])]
-            bench = BENCHMARK_COL_PATTERN.format(zone=zone)
-
             self._s1_features[zone] = z_df.loc[z_df["S1"].notna(), "name"].tolist()
-            s3_raw = [c for c in z_df.loc[z_df["S3"].notna(), "name"] if c != bench]
-            self._s3_features[zone] = [bench] + s3_raw if bench in available_cols else s3_raw
-            self._s4_features[zone] = [c for c in z_df.loc[z_df["S4"].notna(), "name"] if c != bench]
+            self._s3_features[zone] = z_df.loc[z_df["S3"].notna(), "name"].tolist()
+            if not S4_USE_STRUCTURED_RATIOS:
+                self._s4_features[zone] = z_df.loc[z_df["S4"].notna(), "name"].tolist()
 
         self._zone_features = {
             z: sorted(set(self._s1_features[z] + self._s2_features[z] + self._s3_features[z] + self._s4_features[z]))
             for z in ZONES
         }
 
-        # 4. Map to delivery day and QH index (0..95) — PURE UTC
+        # 5. Map to delivery day and QH index (0..95) — PURE UTC
         df["_qh_idx"] = (df["Date"].dt.hour * 4 + df["Date"].dt.minute // 15).astype(np.int8)
         df["_delivery_date"] = df["Date"].dt.date
 
         if start_delivery_date:
             df = df[df["Date"] >= pd.to_datetime(start_delivery_date, utc=True)].reset_index(drop=True)
 
-        # 5. Split into 96 separate tables (one per QH position)
+        # 6. Split into 96 separate tables (one per QH position)
         grouped = dict(tuple(df.groupby("_qh_idx", sort=True)))
         self._qh_tables: dict[int, pd.DataFrame] = {}
         self._qh_dates: dict[int, np.ndarray] = {}
@@ -153,7 +153,7 @@ class QHDataLoader:
                 nb_series[f"DE_nb_k{k:+d}_VWAP_{win}"] = s.ffill() if k > 0 else s
 
         # Regional neighbor VWAP, spreads, and liquidity
-        neighbor_features: dict[str, list[str]] = {z: [] for z in ZONES}
+        neighbor_features: dict[str, list[str]] = {z: [f"{z}_VWAP_90to105"] for z in ZONES}
         for zone in ZONES:
             bench = df[f"{zone}_VWAP_90to105"]
             for k, win in NEIGHBOR_SAFE_VWAP_WINDOWS.items():
@@ -195,6 +195,68 @@ class QHDataLoader:
             df = pd.concat([df, pd.DataFrame(nb_series, index=df.index)], axis=1)
         return df, neighbor_features
 
+    @staticmethod
+    def _build_balance_features(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, list[str]]]:
+        """Construct structured flow-to-load ratio and momentum features (S4)."""
+        bal_series = {}
+        s4_features: dict[str, list[str]] = {z: [] for z in ZONES}
+
+        early_wins = ['345to360', '330to345', '315to330', '300to315', '285to300', '270to285', '255to270', '240to255']
+        mid_wins   = ['225to240', '210to225', '195to210', '180to195', '165to180', '150to165', '135to150']
+        late_wins  = ['120to135', '105to120', '90to105']
+        all_wins   = early_wins + mid_wins + late_wins
+
+        phases = [
+            ('240to360', early_wins),
+            ('135to240', mid_wins),
+            ('90to135',  late_wins),
+            ('90to360',  all_wins),
+        ]
+
+        for zone in ZONES:
+            load = np.maximum(df[f"{zone}_load_forecast"].values, 100.0)
+            partner_zones = [pz for pz in ZONES if pz != zone]
+
+            # 1. Total balance ratios across phases (4 features)
+            for p_name, wins in phases:
+                cols = [f"{zone}_id_balance_{w}" for w in wins if f"{zone}_id_balance_{w}" in df.columns]
+                col_name = f"{zone}_id_balance_ratio_{p_name}"
+                bal_series[col_name] = df[cols].sum(axis=1).values / load
+                s4_features[zone].append(col_name)
+
+            # 2. Bilateral balance ratios to partner zones in mid and late phases (6 features)
+            for pz in partner_zones:
+                for p_name, wins in [('135to240', mid_wins), ('90to135', late_wins)]:
+                    cols = [f"{zone}_id_balance_to_{pz}_{w}" for w in wins if f"{zone}_id_balance_to_{pz}_{w}" in df.columns]
+                    col_name = f"{zone}_id_balance_to_{pz}_ratio_{p_name}"
+                    val = df[cols].sum(axis=1).values / load if cols else np.zeros(len(df), dtype=np.float32)
+                    bal_series[col_name] = val
+                    s4_features[zone].append(col_name)
+
+            # 3. Trade to self ratios across phases (4 features)
+            for p_name, wins in phases:
+                cols = [f"{zone}_id_trade_to_self_{w}" for w in wins if f"{zone}_id_trade_to_self_{w}" in df.columns]
+                col_name = f"{zone}_id_trade_to_self_ratio_{p_name}"
+                bal_series[col_name] = df[cols].sum(axis=1).values / load
+                s4_features[zone].append(col_name)
+
+            # 4. Momentum & Closing dynamics (2 features)
+            mom_col = f"{zone}_id_balance_diff_ratio_90to120"
+            b_90 = df[f"{zone}_id_balance_90to105"].values if f"{zone}_id_balance_90to105" in df.columns else np.zeros(len(df))
+            b_105 = df[f"{zone}_id_balance_105to120"].values if f"{zone}_id_balance_105to120" in df.columns else np.zeros(len(df))
+            bal_series[mom_col] = (b_90 - b_105) / load
+            s4_features[zone].append(mom_col)
+
+            clos_col = f"{zone}_id_trade_to_self_closing_ratio_90to105"
+            t_90 = df[f"{zone}_id_trade_to_self_90to105"].values if f"{zone}_id_trade_to_self_90to105" in df.columns else np.zeros(len(df))
+            bal_series[clos_col] = t_90 / load
+            s4_features[zone].append(clos_col)
+
+        if bal_series:
+            df = pd.concat([df, pd.DataFrame(bal_series, index=df.index)], axis=1)
+
+        return df, s4_features
+
     def get_window(
         self,
         zone: str,
@@ -215,7 +277,8 @@ class QHDataLoader:
             return None
 
         # 1. Contiguous slice: Lookback + test row in one go
-        w_df = qh_df.iloc[test_idx - lookback_days : test_idx + 1]
+        start_idx = max(0, test_idx - lookback_days)
+        w_df = qh_df.iloc[start_idx : test_idx + 1]
         n_train = len(w_df) - 1
         feat_cols = self.feature_names(zone, feature_set=feature_set)
         target_col = TARGET_COL_PATTERN.format(zone=zone)
@@ -271,18 +334,15 @@ class QHDataLoader:
     def feature_names(self, zone: str | None = None, feature_set: str = FEATURE_SET_MACRO) -> list[str]:
         """Return active feature names for the specified zone and feature set."""
         if zone:
-            bench = BENCHMARK_COL_PATTERN.format(zone=zone)
-            s2 = self._s2_features.get(zone, [])
-            s4 = self._s4_features.get(zone, [])
             mapping = {
                 FEATURE_SET_MACRO: self._s1_features.get(zone, []),
                 "S1": self._s1_features.get(zone, []),
-                FEATURE_SET_NEIGHBOR: [bench] + s2 if bench not in s2 else s2,
-                "S2": [bench] + s2 if bench not in s2 else s2,
+                FEATURE_SET_NEIGHBOR: self._s2_features.get(zone, []),
+                "S2": self._s2_features.get(zone, []),
                 FEATURE_SET_FUNDAMENTAL: self._s3_features.get(zone, []),
                 "S3": self._s3_features.get(zone, []),
-                FEATURE_SET_BALANCE: [bench] + s4 if bench not in s4 else s4,
-                "S4": [bench] + s4 if bench not in s4 else s4,
+                FEATURE_SET_BALANCE: self._s4_features.get(zone, []),
+                "S4": self._s4_features.get(zone, []),
             }
             return mapping.get(feature_set, self._s1_features.get(zone, []))
 

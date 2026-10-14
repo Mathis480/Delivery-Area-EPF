@@ -162,21 +162,23 @@ Evaluated over all 35,132 continuous quarter-hours of 2024:
 | Model / Configuration | DE1 | DE2 (Amprion) | DE3 | DE4 | Average | Description |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
 | Naive Benchmark (`VWAP_90to105`) | 26.2815 | 26.6818 | 27.2725 | 27.2536 | 26.8724 | Persistent baseline |
-| Scenario 1: Standard LASSO | 26.6651 | 27.2077 | 27.9160 | 27.8554 | 27.4111 | L1 regularization (Marcjasz et al., 2020) |
-| Scenario 2: Pure cSVR Ensemble (with corr filter) | 25.8960 | 26.2345 | 26.9249 | 26.7819 | 26.4593 | Puć & Janczura (2024) standard benchmark |
-| Scenario 2b: Pure cSVR Ensemble (no corr filter) | — | 26.2044 | — | — | — | Full feature retention (ablation study) |
-| Scenario 3: MAML-NN with linear bypass ($m=0.15$) | 25.9000 | 26.2781 | 26.9485 | 26.8383 | 26.4912 | Hybrid meta-learning baseline |
-| Scenario 4: Pure MAML-NN (Single seed 42) | 25.8803 | 26.1263 | 26.8084 | 26.7293 | 26.3861 | End-to-end meta-learning |
-| Scenario 5: Pure MAML-NN (Deep Ensemble, 3 seeds) | **25.8554** | **26.1087** | **26.7675** | **26.7025** | **26.3585** | Deep ensemble (lowest MAE) |
+| Scenario 1: Standard LASSO | 26.5420 | 27.0392 | 27.7524 | 27.6771 | 27.2527 | L1 regularization (Marcjasz et al., 2020) |
+| Scenario 1b: LASSO Ensemble (+ Naive) | 26.3654 | 26.8327 | 27.5198 | 27.4651 | 27.0458 | Marcjasz et al. (2020) / inv-MAE with Naive |
+| Scenario 2: Pure cSVR Ensemble (with corr filter) | 25.8860 | 26.2217 | 26.9195 | 26.7866 | 26.4535 | Puć & Janczura (2024) standard benchmark |
+| Scenario 2b: Pure cSVR Ensemble (no corr filter) | 25.8456 | 26.1910 | 26.8827 | 26.7503 | 26.4174 | Full feature retention (ablation study) |
+| Scenario 3: MAML-NN with linear bypass ($m=0.15$) | 25.8714 | 26.1824 | 26.8168 | 26.7400 | 26.4026 | Hybrid meta-learning baseline |
+| Scenario 4: Pure MAML-NN Ensemble | **25.8825** | **26.1393** | **26.7499** | **26.7005** | **26.3680** | End-to-end meta-learning (Puć & Janczura, 2024 weights) |
+
+> **Note on Multi-Seed Deep Ensemble (Ablation):** An optional 3-seed deep ensemble yields **26.3431 EUR/MWh** (-0.0249 EUR/MWh improvement at 3x runtime). Full ablation figures, DM tests, and code are documented in the paper appendix.
 
 ### Statistical Significance (Multivariate Daily HAC Diebold-Mariano Test)
-Following Ziel & Weron (2018) and Lago et al. (2021), loss differentials between Pure MAML-NN Deep Ensemble and Pure cSVR Ensemble are tested using daily mean errors with Newey-West HAC estimation ($h = 7$ days):
+Following Ziel & Weron (2018) and Lago et al. (2021), loss differentials between Pure MAML-NN Ensemble and Pure cSVR Ensemble are tested using daily mean errors with Newey-West HAC estimation ($h = 7$ days):
 
 | Metric | DE1 | DE2 (Amprion) | DE3 | DE4 | Average |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| HAC DM Statistic ($d_{\text{MAML}} - d_{\text{cSVR}}$) | -1.0659 | -3.1073 | -4.1124 | -1.9185 | -2.5510 |
-| HAC $p$-value | 0.2865 | 0.0019 | < 0.0001 | 0.0550 | — |
-| Significance Level | — | $p < 0.01$ (**) | $p < 0.001$ (***) | $p < 0.10$ (*) | Consistent Advantage |
+| HAC DM Statistic ($d_{\text{MAML}} - d_{\text{cSVR}}$) | -0.1558 | -1.7099 | -4.1556 | -2.0186 | -2.0100 |
+| HAC $p$-value | 0.8762 | 0.0873 | < 0.0001 | 0.0435 | — |
+| Significance Level | Parity | $p < 0.10$ (*) | $p < 0.001$ (***) | $p < 0.05$ (**) | Consistent Advantage |
 
 ---
 

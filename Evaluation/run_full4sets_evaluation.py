@@ -46,23 +46,13 @@ def generate_zone_plots(zone: str):
     y_true_2d = data["y_true_2d"]
     bm_2d = data["benchmark_2d"]
 
-    # Strictly MAML-NN vs cSVR (Rule 5.2: No cross-architecture hybrids)
+    # Clean, focused comparison: Naive vs LASSO vs cSVR vs MAML Deep Ensemble
     models_to_eval = [
         ("Naive Benchmark", bm_2d),
         ("Standard LASSO", data["pred_lasso_ens_pure_2d"] if "pred_lasso_ens_pure_2d" in data else data["pred_lasso_2d"]),
-        ("cSVR (S2 Neighbor)", data["pred_csvr_s2_2d"]),
-        ("Pure cSVR Ens (S1-S4)", data["pred_csvr_ens_pure_2d"]),
+        ("Pure cSVR Ensemble", data["pred_csvr_ens_pure_2d"]),
+        ("Pure MAML-NN Ensemble", data["pred_maml_nobypass_ens_pure_2d"] if "pred_maml_nobypass_ens_pure_2d" in data else data.get("pred_maml_nobypass_deep_ens_pure_2d", data["pred_maml_ens_pure_2d"])),
     ]
-    if "pred_csvr_nocorr_ens_pure_2d" in data:
-        models_to_eval.append(("Pure cSVR (No Corr)", data["pred_csvr_nocorr_ens_pure_2d"]))
-    models_to_eval.extend([
-        ("cSVR Ens (+Naive)", data["pred_csvr_ens_wn_2d"]),
-        ("MAML (Bypass m=0.15)", data["pred_maml_ens_pure_2d"]),
-        ("Pure MAML Single (S1-S4)", data["pred_maml_nobypass_ens_pure_2d"] if "pred_maml_nobypass_ens_pure_2d" in data else data["pred_maml_ens_pure_2d"]),
-        ("Pure MAML Deep Ens (3-Seed)", data["pred_maml_nobypass_deep_ens_pure_2d"] if "pred_maml_nobypass_deep_ens_pure_2d" in data else data["pred_maml_nobypass_ens_pure_2d"]),
-        ("Pure MAML Deep (+Naive)", data["pred_maml_nobypass_deep_ens_wn_2d"] if "pred_maml_nobypass_deep_ens_wn_2d" in data else data["pred_maml_ens_wn_2d"]),
-    ])
-
     # Compute 15-minute Quarter-Hour rMAE (96 intervals per day)
     qh_rmae = {}
     mae_naive_qh = np.nanmean(np.abs(y_true_2d - bm_2d), axis=0) # shape (96,)
@@ -74,36 +64,32 @@ def generate_zone_plots(zone: str):
 
     # 1. Plot: 96-QH Intraday Curve
     plt.style.use("seaborn-v0_8-whitegrid" if "seaborn-v0_8-whitegrid" in plt.style.available else "default")
-    fig, ax = plt.subplots(figsize=(14, 6), dpi=150)
+    fig, ax = plt.subplots(figsize=(14, 5.5), dpi=150)
     ax.axhline(1.0, color="black", linestyle="--", linewidth=1.5, label="Naive Benchmark (1.00)")
 
-    # Color palette (named matplotlib colors)
+    # High-contrast, publication-grade styling
     colors = {
-        "Standard LASSO": ("gray", ":", 1.8, None),
-        "Weighted LASSO (1-SE)": ("gray", ":", 1.8, None),
-        "cSVR (S2 Neighbor)": ("royalblue", ":", 1.8, None),
-        "Pure cSVR Ens (S1-S4)": ("forestgreen", "-", 2.2, "o"),
-        "Pure cSVR (No Corr)": ("darkturquoise", "-.", 2.0, "p"),
-        "cSVR Ens (+Naive)": ("purple", "--", 1.8, "^"),
-        "MAML (Bypass m=0.15)": ("darkorange", "--", 2.0, "v"),
-        "MAML OptLASSO Ens": ("darkorange", "--", 2.0, "v"),
-        "Pure MAML Single (S1-S4)": ("crimson", "-.", 2.2, "s"),
-        "Pure MAML Deep Ens (3-Seed)": ("deeppink", "-", 2.8, "D"),
-        "Pure MAML Deep (+Naive)": ("saddlebrown", "--", 2.0, "*"),
+        "Standard LASSO": ("dimgray", ":", 2.0, "x"),
+        "Pure cSVR Ensemble": ("royalblue", "-.", 2.2, "s"),
+        "Pure MAML-NN Deep Ensemble": ("crimson", "-", 2.6, "o"),
     }
 
     for name, (col, ls, lw, marker) in colors.items():
         if name in qh_rmae:
-            ax.plot(qhs, qh_rmae[name], label=name, color=col, linestyle=ls, linewidth=lw, marker=marker, markersize=3, markevery=4)
+            ax.plot(qhs, qh_rmae[name], label=name, color=col, linestyle=ls, linewidth=lw, marker=marker, markersize=4, markevery=4)
 
-    ax.set_title(f"2024 Out-of-Sample Relative MAE (rMAE) by 15-Min Quarter Hour — {ZONE_NAMES[zone]}", fontsize=14, fontweight="bold", pad=12)
+    all_vals = [qh_rmae[m[0]] for m in models_to_eval[1:]]
+    y_min = min(0.93, float(np.nanmin(all_vals)) - 0.01)
+    y_max = max(1.05, float(np.nanmax(all_vals)) + 0.01)
+
+    ax.set_title(f"2024 Out-of-Sample Relative MAE (rMAE) by 15-Min Quarter Hour — {ZONE_NAMES[zone]}", fontsize=13, fontweight="bold", pad=12)
     ax.set_xlabel("Quarter Hour of Delivery Day (UTC, 15-min Intervals)", fontsize=11, labelpad=8)
     ax.set_ylabel("Relative MAE (rMAE vs Naive)", fontsize=11)
     ax.set_xticks(range(0, 96, 4))
     ax.set_xticklabels([f"{h:02d}:00" for h in range(24)], rotation=45, ha="right", fontsize=9)
     ax.xaxis.set_minor_locator(ticker.MultipleLocator(1))
-    ax.set_ylim(0.93, 1.05)
-    ax.legend(loc="upper right", framealpha=0.9, fontsize=9, ncol=2)
+    ax.set_ylim(y_min, y_max)
+    ax.legend(loc="upper right", framealpha=0.9, fontsize=10, ncol=2)
     plt.tight_layout()
     plt.savefig(os.path.join(OUTPUT_DIR, f"full4sets_by_hour_{zone}.png"))
     plt.close()
@@ -136,7 +122,7 @@ def generate_zone_plots(zone: str):
     cmap = mcolors.ListedColormap(colors_list)
     norm = mcolors.Normalize(vmin=0.92, vmax=1.06)
 
-    fig, ax = plt.subplots(figsize=(16, 7), dpi=150)
+    fig, ax = plt.subplots(figsize=(15, 3.8), dpi=150)
     ax.grid(False)
     im = ax.imshow(heatmap_matrix, aspect="auto", cmap=cmap, norm=norm, interpolation="nearest")
 

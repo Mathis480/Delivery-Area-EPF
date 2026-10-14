@@ -2,9 +2,8 @@
 Out-of-sample 2024 benchmark across German delivery areas (DE1..DE4):
   - Naive Benchmark & Standard LASSO
   - Pure cSVR Ensemble (Puć & Janczura, 2024)
-  - Pure MAML-NN (Single Seed & Deep Ensemble)
+  - Pure MAML-NN Ensemble (Finn et al., 2017)
 """
-#%%
 from __future__ import annotations
 import os
 import sys
@@ -19,6 +18,12 @@ warnings.filterwarnings("ignore")
 import logging
 logging.getLogger("tensorflow").setLevel(logging.ERROR)
 
+import time
+
+_t0 = 0.0
+def tic(): global _t0; _t0 = time.perf_counter()
+def toc(): return time.perf_counter() - _t0
+
 import multiprocessing
 import numpy as np
 from tqdm import tqdm
@@ -28,7 +33,7 @@ from config import (
     FEATURE_SET_MACRO, FEATURE_SET_NEIGHBOR,
     FEATURE_SET_FUNDAMENTAL, FEATURE_SET_BALANCE,
     CSVR_CORR_THRESH_S1, CSVR_CORR_THRESH_S2,
-    ENSEMBLE_CALIB_DAYS, ENSEMBLE_POWER, ENSEMBLE_QH_ADAPTIVE, MAML_SEEDS,
+    ENSEMBLE_CALIB_DAYS, ENSEMBLE_POWER, ENSEMBLE_QH_ADAPTIVE, RANDOM_SEED,
     MAML_BYPASS_MODES, N_WORKERS,
 )
 from data_loader import QHDataLoader
@@ -36,8 +41,6 @@ from Models.linear import train_lasso, predict_lasso
 from Models.csvr import train_csvr, predict_csvr
 from Models.maml_nn import MAMLManager
 from Models.ensemble import compute_rolling_weighted_average, dm_test
-
-TARGET_ZONES = ZONES  # ["DE1", "DE2", "DE3", "DE4"]
 
 FEATURE_SETS = [
     FEATURE_SET_MACRO, FEATURE_SET_NEIGHBOR,
@@ -93,6 +96,15 @@ def _ensemble_and_save_results(zone: str, preds: dict[str, list[float]], data: d
     data["pred_lasso_ens_pure_2d"] = p_l_ens_2d
     data["pred_lasso_ens_pure"] = _to_1d(p_l_ens_2d)
 
+    # 1b. LASSO + Naive Benchmark (Scenario 1b: Marcjasz et al., 2020)
+    lasso_wn_sets_2d = dict(lasso_sets_2d)
+    lasso_wn_sets_2d["naive"] = bm_2d
+    p_l_wn_2d, _, _ = compute_rolling_weighted_average(
+        lasso_wn_sets_2d, y_true_2d, bm_2d, calib_window=ENSEMBLE_CALIB_DAYS, power=ENSEMBLE_POWER, qh_adaptive=ENSEMBLE_QH_ADAPTIVE
+    )
+    data["pred_lasso_ens_wn_2d"] = p_l_wn_2d
+    data["pred_lasso_ens_wn"] = _to_1d(p_l_wn_2d)
+
     # 2a. Pure cSVR Ensembling (with Corr Filter - Puć & Janczura 2024 Standard)
     csvr_sets_2d = {}
     for s in FEATURE_SETS:
@@ -123,48 +135,27 @@ def _ensemble_and_save_results(zone: str, preds: dict[str, list[float]], data: d
     data["pred_csvr_nocorr_ens_pure_2d"] = p_c_nocorr_ens_2d
     data["pred_csvr_nocorr_ens_pure"] = _to_1d(p_c_nocorr_ens_2d)
 
-    # 3. MAML Single & Deep Ensemble (across configured bypass modes)
+    # 3. MAML Ensembling across feature sets (Puć & Janczura, 2024 inverse-MAE weights)
     for mode in MAML_BYPASS_MODES:
-        single_sets_2d = {}
-        deep_sets_2d = {}
+        maml_sets_2d = {}
         for s in FEATURE_SETS:
             st = SET_TAGS[s]
-            seed_arrays = []
-            primary_seed = MAML_SEEDS[0]
-            for sd in MAML_SEEDS:
-                arr_sd = np.array(preds[f"maml_{mode}_{st}_seed{sd}"], dtype=np.float32)
-                data[f"pred_maml_{mode}_{st}_seed{sd}"] = arr_sd
-                seed_arrays.append(arr_sd)
-                if sd == primary_seed:
-                    data[f"pred_maml_{mode}_{st}"] = arr_sd
-                    mat_single = _to_2d(arr_sd)
-                    data[f"pred_maml_{mode}_{st}_2d"] = mat_single
-                    single_sets_2d[f"single_{st}"] = mat_single
+            arr = np.array(preds[f"maml_{mode}_{st}"], dtype=np.float32)
+            data[f"pred_maml_{mode}_{st}"] = arr
+            mat = _to_2d(arr)
+            data[f"pred_maml_{mode}_{st}_2d"] = mat
+            maml_sets_2d[f"maml_{st}"] = mat
 
-            avg_1d = np.mean(seed_arrays, axis=0).astype(np.float32)
-            data[f"pred_maml_{mode}_deep_{st}"] = avg_1d
-            mat_deep = _to_2d(avg_1d)
-            data[f"pred_maml_{mode}_deep_{st}_2d"] = mat_deep
-            deep_sets_2d[f"deep_{st}"] = mat_deep
-
-        # Single-Seed Ensemble (Primary Seed)
-        p_single_2d, _, _ = compute_rolling_weighted_average(
-            single_sets_2d, y_true_2d, bm_2d, calib_window=ENSEMBLE_CALIB_DAYS, power=ENSEMBLE_POWER, qh_adaptive=ENSEMBLE_QH_ADAPTIVE
+        p_m_ens_2d, _, _ = compute_rolling_weighted_average(
+            maml_sets_2d, y_true_2d, bm_2d, calib_window=ENSEMBLE_CALIB_DAYS, power=ENSEMBLE_POWER, qh_adaptive=ENSEMBLE_QH_ADAPTIVE
         )
-        data[f"pred_maml_{mode}_ens_pure_2d"] = p_single_2d
-        data[f"pred_maml_{mode}_ens_pure"] = _to_1d(p_single_2d)
-
-        # Deep Ensemble across sets
-        p_deep_2d, _, _ = compute_rolling_weighted_average(
-            deep_sets_2d, y_true_2d, bm_2d, calib_window=ENSEMBLE_CALIB_DAYS, power=ENSEMBLE_POWER, qh_adaptive=ENSEMBLE_QH_ADAPTIVE
-        )
-        data[f"pred_maml_{mode}_deep_ens_pure_2d"] = p_deep_2d
-        data[f"pred_maml_{mode}_deep_ens_pure"] = _to_1d(p_deep_2d)
+        data[f"pred_maml_{mode}_ens_pure_2d"] = p_m_ens_2d
+        data[f"pred_maml_{mode}_ens_pure"] = _to_1d(p_m_ens_2d)
 
         # Backward compatibility alias for Scenario 3
         if mode == "optlasso":
-            data["pred_maml_ens_pure_2d"] = p_single_2d
-            data["pred_maml_ens_pure"] = _to_1d(p_single_2d)
+            data["pred_maml_ens_pure_2d"] = p_m_ens_2d
+            data["pred_maml_ens_pure"] = _to_1d(p_m_ens_2d)
 
     # Save to canonical NPZ
     np.savez_compressed(in_npz, **data)
@@ -188,21 +179,19 @@ def _run_zone(zone: str) -> None:
         preds[f"csvr_{st}"] = []
         preds[f"csvr_nocorr_{st}"] = []
         for mode in MAML_BYPASS_MODES:
-            for sd in MAML_SEEDS:
-                preds[f"maml_{mode}_{st}_seed{sd}"] = []
+            preds[f"maml_{mode}_{st}"] = []
 
     loader = QHDataLoader()
+    t_models = {"lasso": 0.0, "csvr": 0.0, "maml": 0.0}
 
-    # Pretrain shared backbones per zone, bypass mode, and seed
+    # Pretrain shared backbones per zone and bypass mode (deterministic RANDOM_SEED)
     maml_managers = {}
     for mode in MAML_BYPASS_MODES:
         maml_managers[mode] = {}
-        for sd in MAML_SEEDS:
-            maml_managers[mode][sd] = {}
-            for s in FEATURE_SETS:
-                mgr = MAMLManager(zone=zone, n_features=loader.n_features(zone, s), feature_set=s, seed=sd, bypass_mode=mode)
-                mgr.pretrain_backbone(loader, test_start="2024-01-01")
-                maml_managers[mode][sd][s] = mgr
+        for s in FEATURE_SETS:
+            mgr = MAMLManager(zone=zone, n_features=loader.n_features(zone, s), feature_set=s, seed=RANDOM_SEED, bypass_mode=mode)
+            mgr.pretrain_backbone(loader, test_start="2024-01-01")
+            maml_managers[mode][s] = mgr
 
     # Main interval inference loop
     for i in tqdm(range(n_total), desc=f"Zone {zone:4s}", unit="QH"):
@@ -214,27 +203,26 @@ def _run_zone(zone: str) -> None:
             st = SET_TAGS[s]
 
             # 1. Standard LASSO
-            w = loader.get_window(
-                zone, q, d_str, feature_set=s,
-                lookback_days=LOOKBACK_DAYS,
-                filter_zero_var=False,
-            )
-            m_l, _ = train_lasso(w.X_train, w.y_train)
-            p_l = float(predict_lasso(m_l, w.X_test)[0])
-            preds[f"lasso_std_{st}"].append(_backtransform(p_l, w.y_mean, w.y_std, bm_eur))
-
-            # 2a. Pure cSVR (with Corr Filter - Puć & Janczura 2024 Standard)
             use_corr = s in [FEATURE_SET_MACRO, FEATURE_SET_NEIGHBOR]
             corr_thresh = CSVR_CORR_THRESH_S1 if s == FEATURE_SET_MACRO else CSVR_CORR_THRESH_S2
-            w_c = loader.get_window(
+            w = loader.get_window(
                 zone, q, d_str, feature_set=s,
                 lookback_days=LOOKBACK_DAYS,
                 filter_zero_var=True, filter_corr=use_corr,
                 corr_threshold=corr_thresh,
             )
-            m_c = train_csvr(w_c.X_train, w_c.y_train, bm_train=w_c.bm_train)
-            p_c = float(predict_csvr(m_c, w_c.X_test, bm_test=bm_eur)[0])
-            p_c_real = _backtransform(p_c, w_c.y_mean, w_c.y_std, bm_eur)
+            tic()
+            m_l, _ = train_lasso(w.X_train, w.y_train)
+            p_l = float(predict_lasso(m_l, w.X_test)[0])
+            t_models["lasso"] += toc()
+            preds[f"lasso_std_{st}"].append(_backtransform(p_l, w.y_mean, w.y_std, bm_eur))
+
+            # 2a. Pure cSVR (with Corr Filter - Puć & Janczura 2024 Standard)
+            tic()
+            m_c = train_csvr(w.X_train, w.y_train, bm_train=w.bm_train)
+            p_c = float(predict_csvr(m_c, w.X_test, bm_test=bm_eur)[0])
+            t_models["csvr"] += toc()
+            p_c_real = _backtransform(p_c, w.y_mean, w.y_std, bm_eur)
             preds[f"csvr_{st}"].append(p_c_real)
 
             # 2b. Pure cSVR (No Corr Filter - Ablation Study)
@@ -252,27 +240,28 @@ def _run_zone(zone: str) -> None:
 
             # 3. MAML inference loop across configured bypass modes
             for mode in MAML_BYPASS_MODES:
-                for sd in MAML_SEEDS:
-                    if mode == "optlasso":
-                        ''' warm-start for the linear support '''
-                        p_l_sup = m_l.predict(w.X_train)
-                        p_scaled = maml_managers[mode][sd][s].adapt_and_predict(
-                            X_support=w.X_train,
-                            y_support=w.y_train,
-                            X_test=w.X_test_full,
-                            linear_support=p_l_sup,
-                            linear_test=p_l,
-                        )
-                    else:
-                        p_scaled = maml_managers[mode][sd][s].adapt_and_predict(
-                            X_support=w.X_train,
-                            y_support=w.y_train,
-                            X_test=w.X_test_full,
-                        )
-                    preds[f"maml_{mode}_{st}_seed{sd}"].append(_backtransform(p_scaled, w.y_mean, w.y_std, bm_eur))
+                tic()
+                if mode == "optlasso":
+                    p_l_sup = m_l.predict(w.X_train)
+                    p_scaled = maml_managers[mode][s].adapt_and_predict(
+                        X_support=w.X_train_full,
+                        y_support=w.y_train,
+                        X_test=w.X_test_full,
+                        linear_support=p_l_sup,
+                        linear_test=p_l,
+                    )
+                else:
+                    p_scaled = maml_managers[mode][s].adapt_and_predict(
+                        X_support=w.X_train_full,
+                        y_support=w.y_train,
+                        X_test=w.X_test_full,
+                    )
+                t_models["maml"] += toc()
+                preds[f"maml_{mode}_{st}"].append(_backtransform(p_scaled, w.y_mean, w.y_std, bm_eur))
 
     # Rolling Inverse-MAE Ensembling & Save
     _ensemble_and_save_results(zone, preds, data, in_npz)
+    print(f"[{zone} Laufzeit] LASSO: {t_models['lasso']/60:.1f}m | cSVR: {t_models['csvr']/60:.1f}m | MAML: {t_models['maml']/60:.1f}m")
 
 
 # Results Evaluation & Master Table
@@ -286,27 +275,20 @@ def get_zone_summary(zone: str) -> dict:
     summary = {"zone": zone, "naive": naive}
     keys_to_track = [
         ("lasso_std", "pred_lasso_ens_pure" if "pred_lasso_ens_pure" in d else "pred_lasso"),
+        ("lasso_wn", "pred_lasso_ens_wn"),
         ("csvr_pure", "pred_csvr_ens_pure"),
         ("csvr_nocorr", "pred_csvr_nocorr_ens_pure"),
         ("maml_byp_m015", "pred_maml_optlasso_ens_pure" if "pred_maml_optlasso_ens_pure" in d else "pred_maml_ens_pure"),
-        ("maml_nobypass_single", "pred_maml_nobypass_ens_pure"),
-        ("maml_nobypass_deep", "pred_maml_nobypass_deep_ens_pure"),
+        ("maml_pure", "pred_maml_nobypass_ens_pure"),
     ]
 
     for label, k in keys_to_track:
-        if k in d:
-            mae = float(np.mean(np.abs(y - d[k])))
-            rmse = float(np.sqrt(np.mean((y - d[k])**2)))
-            summary[label] = mae
-            summary[f"{label}_rmse"] = rmse
-            summary[f"{label}_rmae"] = mae / naive
-        else:
-            summary[label] = np.nan
+        summary[label] = float(np.mean(np.abs(y - d[k]))) if k in d else np.nan
 
-    if "pred_maml_nobypass_deep_ens_pure" in d and "pred_csvr_ens_pure" in d:
-        s_val, p_val = dm_test(y, d["pred_maml_nobypass_deep_ens_pure"], d["pred_csvr_ens_pure"])
-        summary["dm_stat_deep_vs_csvr"] = s_val
-        summary["dm_pval_deep_vs_csvr"] = p_val
+    if "pred_maml_nobypass_ens_pure" in d and "pred_csvr_ens_pure" in d:
+        s_val, p_val = dm_test(y, d["pred_maml_nobypass_ens_pure"], d["pred_csvr_ens_pure"])
+        summary["dm_stat_maml_vs_csvr"] = s_val
+        summary["dm_pval_maml_vs_csvr"] = p_val
 
     return summary
 
@@ -321,11 +303,11 @@ def print_master_table(summaries: list[dict]):
     models = [
         ("Naive Benchmark (VWAP_90to105)", "naive"),
         ("Scenario 1: Standard LASSO", "lasso_std"),
+        ("Scenario 1b: LASSO Ensemble (+ Naive)", "lasso_wn"),
         ("Scenario 2: Pure cSVR Ensemble (with Corr Filter)", "csvr_pure"),
         ("Scenario 2b: Pure cSVR Ensemble (No Corr Filter)", "csvr_nocorr"),
         ("Scenario 3: MAML-NN (Linear Bypass, m=0.15)", "maml_byp_m015"),
-        ("Scenario 4: Pure MAML-NN (Single Seed 42)", "maml_nobypass_single"),
-        ("Scenario 5: Pure MAML-NN (Deep Ensemble, 3 Seeds)", "maml_nobypass_deep"),
+        ("Scenario 4: Pure MAML-NN Ensemble", "maml_pure"),
     ]
 
     for label, key in models:
@@ -341,10 +323,10 @@ def print_master_table(summaries: list[dict]):
 
     print(f"  {'-'*102}")
     
-    # HAC Diebold-Mariano test row (Pure MAML Deep vs Pure cSVR Ensemble)
-    dm_stats = [s.get("dm_stat_deep_vs_csvr", np.nan) for s in summaries]
-    dm_pvals = [s.get("dm_pval_deep_vs_csvr", np.nan) for s in summaries]
-    dm_row_s = f"  {'HAC DM Stat (MAML Deep vs cSVR)':50s}"
+    # HAC Diebold-Mariano test row (Pure MAML Ensemble vs Pure cSVR Ensemble)
+    dm_stats = [s.get("dm_stat_maml_vs_csvr", np.nan) for s in summaries]
+    dm_pvals = [s.get("dm_pval_maml_vs_csvr", np.nan) for s in summaries]
+    dm_row_s = f"  {'HAC DM Stat (Pure MAML vs Pure cSVR)':50s}"
     dm_row_p = f"  {'HAC DM p-value':50s}"
     for s_val, p_val in zip(dm_stats, dm_pvals):
         dm_row_s += f" | {s_val:9.4f}" if not np.isnan(s_val) else f" | {'—':>9s}"
@@ -360,24 +342,20 @@ def print_master_table(summaries: list[dict]):
 # Main Orchestrator
 def main():
     if "--summary_only" in sys.argv or "--summary" in sys.argv:
-        summaries = [get_zone_summary(z) for z in TARGET_ZONES]
+        summaries = [get_zone_summary(z) for z in ZONES]
         print_master_table(summaries)
         return
 
     multiprocessing.set_start_method("spawn", force=True)
+    num_workers = min(N_WORKERS, len(ZONES))
+    print(f"[RUN] Starting 2024 benchmark ({', '.join(ZONES)}) with {num_workers} parallel workers...")
 
-    num_workers = min(N_WORKERS, len(TARGET_ZONES))
-    print(f"\n{'='*80}")
-    print(f"  STARTING PARALLEL MASTER BENCHMARK RUN (2024)")
-    print(f"  Zones: {TARGET_ZONES} | Parallel CPU Workers: {num_workers}")
-    print(f"{'='*80}\n", flush=True)
-
+    tic()
     with multiprocessing.Pool(processes=num_workers) as pool:
-        pool.map(_run_zone, TARGET_ZONES)
+        pool.map(_run_zone, ZONES)
 
-    print(f"\nAll zone computations finished successfully!")
-
-    summaries = [get_zone_summary(z) for z in TARGET_ZONES]
+    print(f"[DONE] Benchmark finished in {toc()/60:.1f} minutes.\n")
+    summaries = [get_zone_summary(z) for z in ZONES]
     print_master_table(summaries)
 
 
