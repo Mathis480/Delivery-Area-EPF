@@ -49,6 +49,7 @@ FEATURE_SET_MACRO       = "set1_macro"
 FEATURE_SET_NEIGHBOR    = "set2_neighbor"
 FEATURE_SET_FUNDAMENTAL = "set3_fundamental"
 FEATURE_SET_BALANCE     = "set4_balance"
+S4_USE_STRUCTURED_RATIOS = True        # Use structured 16-feature flow-to-load and momentum ratios for S4
 
 # MODEL HYPERPARAMETERS
 
@@ -77,8 +78,7 @@ MAML_L1_REG               = 1e-4
 MAML_META_LR              = 5e-4            # Outer loop (meta) learning rate
 MAML_INNER_LR             = 0.0025          # Fast inner loop adaptation learning rate
 MAML_INNER_STEPS          = 8               # Gradient steps during fast adaptation
-MAML_SUPPORT_WEIGHTING    = "soft_kernel"   # Support weighting: 'uniform' or 'soft_kernel'
-MAML_KERNEL_TAU           = 4.0             # Temperature scale factor for soft kernel support weighting
+MAML_SUPPORT_WEIGHTING    = "uniform"       # Support weighting: 'uniform' (Finn et al., 2017)
 MAML_PROX_SHRINK          = 1e-5            # Proximal soft-thresholding shrinkage operator
 MAML_BYPASS_MODES         = ["nobypass", "optlasso"] # Active MAML bypass variants ('nobypass', 'optlasso')
 MAML_BYPASS_SATURATION_M  = 0.15            # Smooth tanh saturation scale for linear bypass: p_safe = m * tanh(p_lin / m)
@@ -86,7 +86,7 @@ MAML_SUPPORT_SELECTION    = "regime_l1"     # Support selection: 'regime_l1' (cl
 MAML_SUPPORT_K            = 28              # Number of support days selected for inner adaptation
 MAML_META_EPOCHS          = 6               # Warm-start shared backbone training epochs
 MAML_BACKBONE_BATCH       = 256             # Batch size for backbone pre-training
-MAML_SEEDS                = [42, 123, 999]  # Multi-seed deep ensembling seeds per feature set
+RANDOM_SEED               = 42              # Central deterministic random seed across framework
 
 # Rolling Inverse-MAE Ensemble (Puć & Janczura, 2024; Marcjasz et al., 2018)
 ENSEMBLE_CALIB_DAYS       = 14              # Rolling calibration window in days (W)

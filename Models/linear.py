@@ -1,45 +1,22 @@
 """
-Linear models for per-QH EPF forecasting:
-  1. Standard OLS LinearRegression (LR) — trains on X_trainval
-  2. LASSO with cross-validation on the validation fold — trains final on X_trainval
+LASSO model for per-QH EPF forecasting with expanding temporal cross-validation.
 """
 from __future__ import annotations
 
 import os
 import pickle
 import warnings
-from typing import Optional
 
 import numpy as np
-from sklearn.linear_model import Lasso, LassoLarsCV, LinearRegression
-from config import LASSO_CV_DAYS, LASSO_MAX_ITER, LASSO_TOL, SCALERS_DIR, TRAINED_MODELS_DIR
+from sklearn.linear_model import Lasso, LassoLarsCV
+from config import LASSO_CV_DAYS, LASSO_MAX_ITER, LASSO_TOL, SCALERS_DIR, TRAINED_MODELS_DIR, RANDOM_SEED
 
-# ---------------------------------------------------------------------------
-# Ordinary Least Squares (LR)
-# ---------------------------------------------------------------------------
-
-def train_lr(X_train: np.ndarray, y_train: np.ndarray) -> LinearRegression:
-    model = LinearRegression(fit_intercept=True, n_jobs=1)
-    model.fit(X_train, y_train)
-    return model
-
-def predict_lr(model: LinearRegression, X: np.ndarray) -> np.ndarray:
-    return model.predict(X)
-
-def get_lr_weights(model: LinearRegression) -> tuple[np.ndarray, float]:
-    return model.coef_.copy(), float(model.intercept_)
-
-
-# ---------------------------------------------------------------------------
-# LASSO (LassoLarsCV)
-# ---------------------------------------------------------------------------
 
 def _build_temporal_cv_splits(
     n_samples: int, cv_days: int = LASSO_CV_DAYS,
 ) -> list[tuple[list[int], list[int]]]:
     """
     Build an expanding-window temporal CV split for LASSO alpha selection.
-
     Each fold uses all data before the test index as training.
     The last `cv_days` observations serve as individual holdout folds.
     """
@@ -50,6 +27,7 @@ def _build_temporal_cv_splits(
         test_indices = [test_pos]
         splits.append((train_indices, test_indices))
     return splits
+
 
 def train_lasso(
     X_train: np.ndarray,
@@ -66,7 +44,7 @@ def train_lasso(
             max_iter=LASSO_MAX_ITER,
             tol=LASSO_TOL,
             fit_intercept=True,
-            random_state=42,
+            random_state=RANDOM_SEED,
         )
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
@@ -97,7 +75,7 @@ def train_lasso(
         max_iter=LASSO_MAX_ITER,
         tol=LASSO_TOL,
         fit_intercept=True,
-        random_state=42,
+        random_state=RANDOM_SEED,
     )
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore")
@@ -105,13 +83,16 @@ def train_lasso(
 
     return final_model, best_alpha
 
+
 def predict_lasso(model: Lasso, X: np.ndarray) -> np.ndarray:
     """Predict scaled price difference."""
     return model.predict(X)
 
+
 def get_lasso_weights(model: Lasso) -> tuple[np.ndarray, float]:
     """Return (coef_, intercept_) from a fitted Lasso."""
     return model.coef_.copy(), float(model.intercept_)
+
 
 # ---------------------------------------------------------------------------
 # Model & Scaler persistence utilities
@@ -124,6 +105,7 @@ def save_scaler(scaler, zone: str, qh_idx: int, date_str: str, folder: str = SCA
     with open(filename, "wb") as f:
         pickle.dump(scaler, f)
     return filename
+
 
 def save_trained_model(model, name: str, zone: str, qh_idx: int, date_str: str, folder: str = TRAINED_MODELS_DIR) -> str:
     """Save fitted model object to Models/trained_models/."""

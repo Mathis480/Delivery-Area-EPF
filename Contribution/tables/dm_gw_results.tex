@@ -1,0 +1,46 @@
+% ── BLEND VS NAÏVE BENCHMARK TABELLE (ALL ZONES INKL. RANKING) ──
+\begin{table}[ht]
+\centering
+\caption{50/50 Blend vs. Na\"ive Benchmark Performance and Rankings across Control Zones}
+\label{tab:blend_vs_bm_all_zones}
+\small
+\begin{tabular}{llcrrrrr}
+\toprule
+Zone & Model & Rank & $\bar{\text{MAE}}$ & DM $t$ & $p$-val & GW $\chi^2$ & $N$ \\
+\midrule
+    \textbf{DE1} & Na\"ive BM & 4 & 26.316 & — & — & — & 366 \\
+                 & LR       & \textbf{1} & \textbf{25.464} & +4.983 & $0.0000^{***}$ & +24.829 & 366 \\
+                 & LASSO    & 2 & 26.003 & +5.059 & $0.0000^{***}$ & +25.597 & 366 \\
+                 & XGB      & 5 & 26.320 & -0.120 & $0.9042$ & +0.014 & 366 \\
+                 & NN       & 3 & 26.187 & +1.803 & $0.0715^{*}$ & +3.249 & 366 \\
+                 & LSTM     & 6 & 26.604 & -3.308 & $0.0009^{***}$ & +10.941 & 366 \\
+    \midrule
+    \textbf{DE2} & Na\"ive BM & 4 & 26.688 & — & — & — & 366 \\
+                 & LR       & 2 & 26.453 & +1.515 & $0.1298$ & +2.295 & 366 \\
+                 & LASSO    & \textbf{1} & \textbf{26.401} & +4.355 & $0.0000^{***}$ & +18.969 & 366 \\
+                 & XGB      & 5 & 26.703 & -0.606 & $0.5444$ & +0.368 & 366 \\
+                 & NN       & 3 & 26.529 & +2.277 & $0.0228^{**}$ & +5.186 & 366 \\
+                 & LSTM     & 6 & 27.748 & -5.477 & $0.0000^{***}$ & +29.998 & 366 \\
+    \midrule
+    \textbf{DE3} & Na\"ive BM & 4 & 27.284 & — & — & — & 366 \\
+                 & LR       & \textbf{1} & \textbf{26.871} & +2.584 & $0.0098^{***}$ & +6.678 & 366 \\
+                 & LASSO    & 2 & 27.045 & +3.641 & $0.0003^{***}$ & +13.255 & 366 \\
+                 & XGB      & 5 & 27.313 & -0.958 & $0.3381$ & +0.918 & 366 \\
+                 & NN       & 3 & 27.145 & +3.209 & $0.0013^{***}$ & +10.298 & 366 \\
+                 & LSTM     & 6 & 28.337 & -5.492 & $0.0000^{***}$ & +30.160 & 366 \\
+    \midrule
+    \textbf{DE4} & Na\"ive BM & 4 & 27.258 & — & — & — & 366 \\
+                 & LR       & 2 & 27.027 & +1.562 & $0.1182$ & +2.441 & 366 \\
+                 & LASSO    & \textbf{1} & \textbf{26.898} & +3.692 & $0.0002^{***}$ & +13.633 & 366 \\
+                 & XGB      & 5 & 27.287 & -1.094 & $0.2739$ & +1.197 & 366 \\
+                 & NN       & 3 & 27.151 & +2.250 & $0.0244^{**}$ & +5.064 & 366 \\
+                 & LSTM     & 6 & 28.324 & -5.425 & $0.0000^{***}$ & +29.429 & 366 \\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}\small
+\item \textit{Note:} 50/50 blend = 0.5 $\times$ model + 0.5 $\times$ na\"ive benchmark. $\bar{\text{MAE}}$ denotes the average daily Mean Absolute Error.
+Rankings (1 = best) are computed across all 5 blends and the unblended Na\"ive Benchmark.
+DM $t$ and GW $\chi^2$ evaluate the blend against the Na\"ive Benchmark.
+$^{***}p<0.01$, $^{**}p<0.05$, $^{*}p<0.10$.
+\end{tablenotes}
+\end{table}
