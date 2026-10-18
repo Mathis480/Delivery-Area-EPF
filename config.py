@@ -72,20 +72,23 @@ LASSO_CV_DAYS  = 14           # Temporal CV window for alpha selection (last 14 
 
 # MAML-NN (Finn et al., 2017)
 MAML_HIDDEN_SIZES         = [128, 64]
-MAML_DROPOUT              = 0.0             # No dropout during meta-training
 MAML_ACTIVATION           = "tanh"
 MAML_L1_REG               = 1e-4
-MAML_META_LR              = 5e-4            # Outer loop (meta) learning rate
+MAML_META_LR              = 5e-4            # Adam learning rate for backbone pre-training
 MAML_INNER_LR             = 0.0025          # Fast inner loop adaptation learning rate
 MAML_INNER_STEPS          = 8               # Gradient steps during fast adaptation
-MAML_SUPPORT_WEIGHTING    = "uniform"       # Support weighting: 'uniform' (Finn et al., 2017)
 MAML_PROX_SHRINK          = 1e-5            # Proximal soft-thresholding shrinkage operator
 MAML_BYPASS_MODES         = ["nobypass", "optlasso"] # Active MAML bypass variants ('nobypass', 'optlasso')
+MAML_TRAINING_MODES       = ["warmstart", "maml"]    # Active MAML training variants ('warmstart', 'maml')
 MAML_BYPASS_SATURATION_M  = 0.15            # Smooth tanh saturation scale for linear bypass: p_safe = m * tanh(p_lin / m)
-MAML_SUPPORT_SELECTION    = "regime_l1"     # Support selection: 'regime_l1' (closest market regimes) or 'recent' (last K days)
 MAML_SUPPORT_K            = 28              # Number of support days selected for inner adaptation
 MAML_META_EPOCHS          = 6               # Warm-start shared backbone training epochs
+MAML_BILEVEL_EPOCHS       = 5               # Meta-epochs for bilevel MAML training (E_meta in paper)
+MAML_OUTER_CLIP           = 0.5             # Meta-gradient clipping threshold for bilevel MAML (Antoniou et al., 2019)
 MAML_BACKBONE_BATCH       = 256             # Batch size for backbone pre-training
+MAML_META_BATCH           = 16              # FOMAML tasks (QH, query day) averaged per meta-update
+MAML_N_FOLDS              = 5               # Temporal folds over the training window (fold 0 = warm-start/support only)
+MAML_WARMSTART_SCOPE      = "fold0"         # 'fold0': maml-mode warm-start sees only fold 0 (query days unseen); 'all': legacy, all days (warmstart mode always uses all days)
 RANDOM_SEED               = 42              # Central deterministic random seed across framework
 
 # Rolling Inverse-MAE Ensemble (Puć & Janczura, 2024; Marcjasz et al., 2018)

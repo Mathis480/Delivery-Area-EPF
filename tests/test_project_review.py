@@ -611,6 +611,17 @@ class TestModelAPIContracts(unittest.TestCase):
         self.assertIsInstance(pred, float)
         self.assertFalse(np.isnan(pred))
 
+    def test_maml_training_modes(self):
+        """MAMLManager supports both 'warmstart' and 'maml' modes."""
+        from Models.maml_nn import MAMLManager
+        from config import FEATURE_SET_MACRO
+        mgr_w = MAMLManager(zone="DE2", n_features=5, feature_set=FEATURE_SET_MACRO, training_mode="warmstart")
+        self.assertEqual(mgr_w.training_mode, "warmstart")
+        mgr_m = MAMLManager(zone="DE2", n_features=5, feature_set=FEATURE_SET_MACRO, training_mode="maml")
+        self.assertEqual(mgr_m.training_mode, "maml")
+        with self.assertRaises(ValueError):
+            MAMLManager(zone="DE2", n_features=5, training_mode="invalid_mode")
+
     def test_init_exports_all(self):
         """Models.__init__ must export all documented functions."""
         from Models import (
