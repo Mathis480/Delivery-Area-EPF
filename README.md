@@ -164,10 +164,10 @@ Evaluated over all 35,132 continuous quarter-hours of 2024:
 | Scenario 1b: LASSO Ensemble (+ Naive) | 26.3654 | 26.8327 | 27.5198 | 27.4651 | 27.0457 | Marcjasz et al. (2020) / inv-MAE with Naive |
 | Scenario 2: Pure cSVR Ensemble (with corr filter) | 25.8860 | 26.2217 | 26.9195 | 26.7866 | 26.4535 | Puć & Janczura (2024) standard benchmark |
 | Scenario 2b: Pure cSVR Ensemble (no corr filter) | 25.8456 | 26.1910 | 26.8827 | 26.7503 | 26.4174 | Full feature retention (ablation study) |
-| Scenario 3a: MAML-NN (Warmstart + OptLASSO) | 25.8574 | 26.1779 | 26.8077 | 26.7339 | 26.3942 | Linear bypass with warm-start backbone |
-| Scenario 3b: MAML-NN (FOMAML + OptLASSO) | 25.9486 | 26.2060 | 26.8459 | 26.7625 | 26.4407 | Linear bypass with first-order MAML |
-| Scenario 4a: Pure MAML-NN (Warmstart) | **25.8502** | **26.1274** | **26.7400** | **26.6910** | **26.3522** | Pre-trained backbone + fast test adaptation |
-| Scenario 4b: Pure MAML-NN (FOMAML) | 25.8909 | 26.1489 | 26.7777 | 26.6972 | 26.3787 | FOMAML meta-learning (Finn et al., 2017) |
+| Scenario 3a: Pure NN Warmstart (+ OptLASSO) | 25.8574 | 26.1779 | 26.8077 | 26.7339 | 26.3942 | Linear bypass with warm-start backbone |
+| Scenario 3b: Pure FOMAML-NN (+ OptLASSO) | 25.8965 | 26.1948 | 26.8371 | 26.7756 | 26.4260 | Linear bypass with first-order MAML |
+| Scenario 4a: Pure NN Warmstart (no bypass) | **25.8502** | **26.1274** | **26.7400** | **26.6910** | **26.3522** | Pre-trained backbone + fast test adaptation |
+| Scenario 4b: Pure FOMAML-NN (no bypass) | 25.8888 | 26.1759 | 26.7953 | 26.7488 | 26.4022 | FOMAML meta-learning (Finn et al., 2017) |
 
 > **Note on Multi-Seed Deep Ensemble (Ablation):** An optional 3-seed deep ensemble yields **26.3431 EUR/MWh** (-0.0249 EUR/MWh improvement at 3x runtime). Full ablation figures, DM tests, and code are documented in the paper appendix.
 >

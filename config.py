@@ -87,8 +87,6 @@ MAML_BILEVEL_EPOCHS       = 5               # Meta-epochs for bilevel MAML train
 MAML_OUTER_CLIP           = 0.5             # Meta-gradient clipping threshold for bilevel MAML (Antoniou et al., 2019)
 MAML_BACKBONE_BATCH       = 256             # Batch size for backbone pre-training
 MAML_META_BATCH           = 16              # FOMAML tasks (QH, query day) averaged per meta-update
-MAML_N_FOLDS              = 5               # Temporal folds over the training window (fold 0 = warm-start/support only)
-MAML_WARMSTART_SCOPE      = "fold0"         # 'fold0': maml-mode warm-start sees only fold 0 (query days unseen); 'all': legacy, all days (warmstart mode always uses all days)
 RANDOM_SEED               = 42              # Central deterministic random seed across framework
 
 # Rolling Inverse-MAE Ensemble (Puć & Janczura, 2024; Marcjasz et al., 2018)

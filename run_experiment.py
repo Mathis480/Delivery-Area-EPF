@@ -261,10 +261,10 @@ def print_master_table(summaries: list[dict]):
         ("Scenario 1b: LASSO Ensemble (+ Naive)", "lasso_wn"),
         ("Scenario 2: Pure cSVR Ensemble (with Corr Filter)", "csvr_pure"),
         ("Scenario 2b: Pure cSVR Ensemble (No Corr Filter)", "csvr_nocorr"),
-        ("Scenario 3a: MAML-NN (Warmstart + OptLASSO)", "maml_ws_optlasso"),
-        ("Scenario 3b: MAML-NN (Bilevel MAML + OptLASSO)", "maml_maml_optlasso"),
-        ("Scenario 4a: Pure MAML-NN (Warmstart)", "maml_ws_pure"),
-        ("Scenario 4b: Pure MAML-NN (Bilevel MAML)", "maml_maml_pure"),
+        ("Scenario 3a: Pure NN Warmstart (+ OptLASSO)", "maml_ws_optlasso"),
+        ("Scenario 3b: Pure FOMAML-NN (+ OptLASSO)", "maml_maml_optlasso"),
+        ("Scenario 4a: Pure NN Warmstart (no bypass)", "maml_ws_pure"),
+        ("Scenario 4b: Pure FOMAML-NN (no bypass)", "maml_maml_pure"),
     ]
 
     for label, key in models:
