@@ -4,12 +4,14 @@ Per-QH EPF neural networks with inference-time fast adaptation (K nearest suppor
 * ``WarmStartNN`` (mode ``warmstart``): pooled supervised pre-training of the backbone across all
   96 QH (Adam, MAE). Plain pre-train + fine-tune, NOT meta-learning.
 * ``FOMAMLNN`` (mode ``maml``): warm-start initialization, then FIRST-ORDER MAML (Finn et al., 2017,
-  Sec. 5.2). Tasks are sampled i.i.d. across all calibration days. Per task, theta' = theta - alpha * grad L_support(theta)
+  Sec. 5.2). Query days are sampled i.i.d. across the calibration window, support only from earlier days. Per task, theta' = theta - alpha * grad L_support(theta)
   (MAML_INNER_STEPS SGD steps) and the meta-gradient is grad_{theta'} L_query(theta'); the second-order term
   d theta' / d theta is dropped. The averaged meta-gradient is applied to theta with Adam.
+* mode ``maml_scratch``: same FOMAML from random initialization (as in Finn et al., 2017), no warm-start.
+  Meta-epochs are compute-matched to warm-start + FOMAML (MAML_SCRATCH_BILEVEL_EPOCHS).
 
 Extensions beyond Finn et al.: warm-start initialization, kNN support selection, proximal
-soft-thresholding in the inner loop, outer-gradient clipping (Antoniou et al., 2019), linear bypass.
+soft-thresholding in the inner loop, optional outer-gradient clipping, linear bypass.
 Backbones are always retrained; checkpoints are written for reproduction only.
 """
 from __future__ import annotations
@@ -29,13 +31,14 @@ tf.get_logger().setLevel("ERROR")
 from tensorflow import keras
 from tensorflow.keras import layers, regularizers
 
+from data_loader import corr_filter_kwargs
 from Models.linear import train_lasso
 from config import (
     MAML_ACTIVATION, MAML_BACKBONE_BATCH, MAML_HIDDEN_SIZES,
     MAML_INNER_LR, MAML_INNER_STEPS, MAML_L1_REG, MAML_META_EPOCHS,
     MAML_META_LR, MAML_PROX_SHRINK, MAML_BYPASS_SATURATION_M,
     MAML_SUPPORT_K, MAML_TRAINING_MODES, MAML_BILEVEL_EPOCHS, MAML_OUTER_CLIP,
-    MAML_META_BATCH,
+    MAML_META_BATCH, MAML_SCRATCH_BILEVEL_EPOCHS,
     N_QH, LOOKBACK_DAYS, TRAINED_MODELS_DIR, FEATURE_SET_MACRO, RANDOM_SEED,
 )
 
@@ -86,8 +89,8 @@ class MAMLManager:
         training_mode: str | None = None,
     ):
         mode = (training_mode or MAML_TRAINING_MODES[0]).lower()
-        if mode not in ("warmstart", "maml"):
-            raise ValueError(f"Unknown training_mode: '{mode}'. Expected 'warmstart' or 'maml'.")
+        if mode not in ("warmstart", "maml", "maml_scratch"):
+            raise ValueError(f"Unknown training_mode: '{mode}'. Expected 'warmstart', 'maml' or 'maml_scratch'.")
 
         self.zone = zone
         self.n_features = n_features
@@ -108,8 +111,10 @@ class MAMLManager:
 
     def pretrain_backbone(self, loader, test_start: str = "2024-01-01", lookback_days: int = LOOKBACK_DAYS) -> None:
         """Loads all 96 QH training windows (target = raw spread or linear residual) and trains backbone."""
+        # Same correlation filter as the inference-time LASSO, so the optlasso bypass is identical in both stages
+        corr_kw = corr_filter_kwargs(self.feature_set)
         windows = [
-            loader.get_window(self.zone, q, test_start, feature_set=self.feature_set, lookback_days=lookback_days)
+            loader.get_window(self.zone, q, test_start, feature_set=self.feature_set, lookback_days=lookback_days, **corr_kw)
             for q in range(N_QH)
         ]
         X_by_qh = [w.X_train_full.astype(np.float32) for w in windows]
@@ -117,8 +122,8 @@ class MAMLManager:
             y_by_qh = []
             m = MAML_BYPASS_SATURATION_M
             for w in windows:
-                m_l, _ = train_lasso(w.X_train_full, w.y_train)
-                p_lin = m_l.predict(w.X_train_full)
+                m_l, _ = train_lasso(w.X_train, w.y_train)
+                p_lin = m_l.predict(w.X_train)
                 p_lin_sat = m * np.tanh(p_lin / m)
                 y_by_qh.append((w.y_train - p_lin_sat).astype(np.float32))
         else:
@@ -163,16 +168,17 @@ class MAMLManager:
 
     def _train(self, X_by_qh: list[np.ndarray], y_by_qh: list[np.ndarray]) -> None:
         # Stage 1: pooled supervised warm-start initialization theta_0 across all days and QH
-        self._fit_warmstart(np.vstack(X_by_qh), np.concatenate(y_by_qh))
-
+        if self.training_mode != "maml_scratch":
+            self._fit_warmstart(np.vstack(X_by_qh), np.concatenate(y_by_qh))
         if self.training_mode == "warmstart":
             return
 
-        # Stage 2: FOMAML. Sample tasks i.i.d. across all calibration days (Finn et al., 2017).
+        # Stage 2: FOMAML. Sample tasks i.i.d. across calibration days (Finn et al., 2017).
         n_days = len(X_by_qh[0])
         rng = np.random.default_rng(self.seed)
         opt = keras.optimizers.Adam(learning_rate=MAML_META_LR)
-        total_meta_steps = MAML_BILEVEL_EPOCHS * max(1, n_days // MAML_META_BATCH)
+        epochs = MAML_SCRATCH_BILEVEL_EPOCHS if self.training_mode == "maml_scratch" else MAML_BILEVEL_EPOCHS
+        total_meta_steps = epochs * max(1, n_days // MAML_META_BATCH)
         all_days = np.arange(n_days)
 
         for _ in range(total_meta_steps):
@@ -182,9 +188,9 @@ class MAMLManager:
                 q = rng.integers(len(X_by_qh))
                 X_q, y_q = X_by_qh[q], y_by_qh[q]
 
-                # Sample random query day t across the entire calibration window
-                t = rng.integers(n_days)
-                supp_pool = all_days[all_days != t]
+                # Query day t; support pool restricted to days before t, as at test time
+                t = rng.integers(MAML_SUPPORT_K, n_days)
+                supp_pool = all_days[:t]
 
                 xq, yq = X_q[t : t + 1], y_q[t : t + 1, None]
                 dists = cdist(X_q[supp_pool], xq, metric="cityblock").ravel()

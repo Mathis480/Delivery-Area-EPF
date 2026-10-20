@@ -1,104 +1,68 @@
 """
-Rolling Inverse-MAE Forecast Averaging and Statistical Evaluation.
-Based on Marcjasz et al. (2018) and Puć & Janczura (2024).
+Rolling inverse-MAE forecast averaging (Marcjasz et al., 2018; Puć & Janczura, 2024) and
+statistical tests on daily loss vectors (Diebold & Mariano, 1995; Giacomini & White, 2006).
 """
-from typing import Dict, Optional, Tuple
+from __future__ import annotations
+
 import numpy as np
-import pandas as pd
 import scipy.stats
 
+from config import ENSEMBLE_CALIB_DAYS, ENSEMBLE_POWER
 
-def compute_rolling_weighted_average(
-    predictions: Dict[str, np.ndarray],
-    y_true_2d: np.ndarray,
-    benchmark_2d: np.ndarray,
-    calib_window: int = 14,
-    power: float = 1.0,
-    warmup_weights: Optional[Dict[str, float]] = None,
-    qh_adaptive: bool = True,
-) -> Tuple[np.ndarray, pd.DataFrame, Dict[str, float]]:
+
+def inverse_mae_average(
+    predictions: dict[str, np.ndarray], y_true_2d: np.ndarray,
+    calib_window: int = ENSEMBLE_CALIB_DAYS, power: float = ENSEMBLE_POWER,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Average (days x 96) forecasts with per-product weights from the MAE of the preceding `calib_window` days.
+
+    Equal weights during the first `calib_window` days. Returns the averaged forecast and the
+    daily mean weight of every member (days x members).
     """
-    Computes rolling out-of-sample forecast ensemble using ex-ante inverse-MAE weights.
-    When qh_adaptive=True, computes separate calibration weights for each 15-minute QH.
-    """
-    model_names = list(predictions.keys())
-    n_models = len(model_names)
-    n_days, n_qh = y_true_2d.shape
-
-    for name, pred in predictions.items():
-        if pred.shape != (n_days, n_qh):
-            raise ValueError(f"Model '{name}' shape {pred.shape} does not match y_true_2d {(n_days, n_qh)}")
-
-    preds_all = np.array([predictions[m] for m in model_names])
-    pred_ens_2d = np.zeros((n_days, n_qh), dtype=np.float64)
-    weights_history = np.zeros((n_days, n_models), dtype=np.float64)
-
-    if warmup_weights is None:
-        init_w = np.ones(n_models) / n_models
-    else:
-        init_w = np.array([warmup_weights.get(m, 1.0 / n_models) for m in model_names])
-        init_w = init_w / np.sum(init_w)
-
+    preds = np.stack(list(predictions.values()))  # members x days x 96
+    n_days = y_true_2d.shape[0]
+    ens = np.empty_like(y_true_2d, dtype=np.float64)
+    weights = np.empty((n_days, len(predictions)))
     for d in range(n_days):
-        p_today = preds_all[:, d, :]
         if d < calib_window:
-            weights_history[d] = init_w
-            pred_ens_2d[d] = init_w @ p_today
+            w = np.full(preds.shape[::2], 1.0 / len(predictions))
         else:
-            cal_p = preds_all[:, d - calib_window : d, :]
-            cal_y = y_true_2d[d - calib_window : d, :]
-            axis = 1 if qh_adaptive else (1, 2)
-            maes = np.nan_to_num(np.nanmean(np.abs(cal_p - cal_y[None, ...]), axis=axis), nan=1e6)
-            maes = np.maximum(maes, 1e-4)
-            inv = 1.0 / (maes ** power)
-            if qh_adaptive:
-                w_q = inv / np.sum(inv, axis=0, keepdims=True)
-                pred_ens_2d[d] = np.sum(w_q * p_today, axis=0)
-                weights_history[d] = np.mean(w_q, axis=1)
-            else:
-                w = inv / np.sum(inv)
-                pred_ens_2d[d] = w @ p_today
-                weights_history[d] = w
-
-    weights_df = pd.DataFrame(weights_history, columns=model_names)
-
-    mask = ~np.isnan(y_true_2d) & ~np.isnan(pred_ens_2d)
-    y_eval, b_eval, e_eval = y_true_2d[mask], benchmark_2d[mask], pred_ens_2d[mask]
-    mae_naive = float(np.mean(np.abs(y_eval - b_eval)))
-    mae_ens = float(np.mean(np.abs(y_eval - e_eval)))
-    rmse_ens = float(np.sqrt(np.mean((y_eval - e_eval) ** 2)))
-    rmae = mae_ens / mae_naive if mae_naive > 0 else 1.0
-
-    metrics = {
-        "mae_naive": mae_naive,
-        "mae_ensemble": mae_ens,
-        "rmae_ensemble": rmae,
-        "rmse_ensemble": rmse_ens,
-    }
-    return pred_ens_2d, weights_df, metrics
+            mae = np.nanmean(np.abs(preds[:, d - calib_window: d] - y_true_2d[None, d - calib_window: d]), axis=1)
+            inv = mae ** -power
+            w = inv / inv.sum(axis=0, keepdims=True)
+        ens[d] = np.sum(w * preds[:, d], axis=0)
+        weights[d] = w.mean(axis=1)
+    return ens, weights
 
 
-def compute_rolling_qh_adaptive_ensemble(
-    predictions: Dict[str, np.ndarray],
-    y_true_2d: np.ndarray,
-    benchmark_2d: np.ndarray,
-    calib_window: int = 28,
-    power: float = 2.0,
-    warmup_weights: Optional[Dict[str, float]] = None,
-) -> Tuple[np.ndarray, pd.DataFrame, Dict[str, float]]:
-    """Time-of-day adaptive ensemble optimizing ex-ante weights per 15-minute QH."""
-    return compute_rolling_weighted_average(
-        predictions, y_true_2d, benchmark_2d, calib_window, power, warmup_weights, qh_adaptive=True
-    )
+def daily_loss(pred_2d: np.ndarray, y_true_2d: np.ndarray) -> np.ndarray:
+    """Mean absolute error per day (L1 norm of the daily error vector / 96)."""
+    return np.nanmean(np.abs(pred_2d - y_true_2d), axis=1)
 
 
-def dm_test(actual: np.ndarray, p1: np.ndarray, p2: np.ndarray, h: int = 7) -> Tuple[float, float]:
-    """Multivariate daily-vector Diebold-Mariano test with Newey-West HAC variance."""
-    n = (min(len(actual), len(p1), len(p2)) // 96) * 96
-    d = np.mean(np.abs(actual[:n].reshape(-1, 96) - p1[:n].reshape(-1, 96)), axis=1) - \
-        np.mean(np.abs(actual[:n].reshape(-1, 96) - p2[:n].reshape(-1, 96)), axis=1)
-    d_bar, D = np.mean(d), len(d)
-    gamma = [np.mean((d[k:] - d_bar) * (d[:D - k] - d_bar)) for k in range(h + 1)]
-    var_hac = gamma[0] + 2 * sum((1 - k / (h + 1)) * gamma[k] for k in range(1, h + 1))
-    stat = float(d_bar / np.sqrt(max(var_hac, 1e-12) / D))
-    return stat, float(2 * (1 - scipy.stats.norm.cdf(abs(stat))))
+def dm_test(loss_a: np.ndarray, loss_b: np.ndarray, h: int = 7) -> tuple[float, float]:
+    """Daily-vector Diebold-Mariano test with Newey-West variance (lag h).
+
+    One-sided p-value for H1: forecast B is more accurate than forecast A.
+    """
+    d = loss_a - loss_b
+    n, d_bar = len(d), d.mean()
+    gamma = [np.mean((d[k:] - d_bar) * (d[: n - k] - d_bar)) for k in range(h + 1)]
+    var = gamma[0] + 2 * sum((1 - k / (h + 1)) * gamma[k] for k in range(1, h + 1))
+    stat = float(d_bar / np.sqrt(var / n))
+    return stat, float(1 - scipy.stats.norm.cdf(stat))
+
+
+def gw_test(loss_a: np.ndarray, loss_b: np.ndarray) -> tuple[float, float]:
+    """Conditional Giacomini-White test (one-step horizon, instruments: constant and lagged loss differential).
+
+    One-sided p-value for H1: forecast B is more accurate than forecast A (as in Lago et al., 2021).
+    """
+    d = loss_a - loss_b
+    instruments = np.column_stack([np.ones(len(d) - 1), d[:-1]])
+    z = instruments * d[1:, None]
+    n = len(z)
+    beta, *_ = np.linalg.lstsq(z, np.ones(n), rcond=None)
+    r2 = 1 - np.mean((np.ones(n) - z @ beta) ** 2)
+    stat = float(n * r2 * np.sign(d.mean()))
+    return stat, float(1 - scipy.stats.chi2.cdf(stat, z.shape[1]))

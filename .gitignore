@@ -1,8 +1,4 @@
-# ==============================================================================
-# STRICT SECURITY & DATA PROTECTION: PREVENT ANY RAW OR SENSITIVE DATA LEAKAGE
-# ==============================================================================
-
-# Ignore all tabular, binary, database, and archive data formats
+# Data and result files (EPEX data are proprietary)
 *.csv
 *.tsv
 *.parquet
@@ -31,7 +27,7 @@
 *.txt
 *.json
 
-# Raw data folders with arbitrary binary/archive dumps
+# Raw data
 Data/Raw/
 Data/Transactions/
 Data/EPEX Intraday Continuous/*.csv
@@ -55,9 +51,7 @@ Thumbs.db
 .idea/
 .vscode/
 
-# ==============================================================================
-# WHITELIST: ONLY CODE, REPOSITORY DOCUMENTATION, AND STRUCTURE KEEPERS ALLOWED
-# ==============================================================================
+# Whitelist: code and documentation
 !*.py
 !*.ipynb
 !*.md
@@ -67,12 +61,12 @@ Thumbs.db
 !features.yaml
 !requirements.txt
 
-# Archived & Scratch directories (experimental code, not synced via git)
+# Archive
 old/
 Old
 Old/
 scratch/
 
-# Unpublished manuscripts & contribution papers
+# Manuscript
 Contribution/
 

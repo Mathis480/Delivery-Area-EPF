@@ -1,40 +1,33 @@
 """
-Central configuration for the EPF Delivery Area forecasting framework.
-All paths, hyperparameters, and scenario settings in one place.
+Central configuration for the EPF delivery area forecasting framework.
 """
 import os
 
 # PATHS
-PROJECT_ROOT       = os.path.dirname(os.path.abspath(__file__))
-MASTER_PARQUET     = os.path.join(PROJECT_ROOT, "Data", "master_dataset.parquet")
-FEATURES_CSV       = os.path.join(PROJECT_ROOT, "features.csv")
-SCALERS_DIR        = os.path.join(PROJECT_ROOT, "Models", "scalers")
-TRAINED_MODELS_DIR = os.path.join(PROJECT_ROOT, "Models", "trained_models")
-RESULTS_DIR        = os.path.join(PROJECT_ROOT, "Results")
+PROJECT_ROOT   = os.path.dirname(os.path.abspath(__file__))
+MASTER_PARQUET = os.path.join(PROJECT_ROOT, "Data", "master_dataset.parquet")
+FEATURES_CSV   = os.path.join(PROJECT_ROOT, "features.csv")
+RESULTS_DIR    = os.path.join(PROJECT_ROOT, "Results")
 
-os.makedirs(SCALERS_DIR, exist_ok=True)
-os.makedirs(TRAINED_MODELS_DIR, exist_ok=True)
-os.makedirs(RESULTS_DIR, exist_ok=True)
-
-# DATA CONFIGURATION
-ZONES          = ["DE1", "DE2", "DE3", "DE4"]
-N_QH           = 96
+# DATA
+ZONES = ["DE1", "DE2", "DE3", "DE4"]
+N_QH  = 96
 
 TARGET_COL_PATTERN    = "{zone}_VWAP_0to30"
 BENCHMARK_COL_PATTERN = "{zone}_VWAP_90to105"
 
-# TRAINING & EVALUATION WINDOW
-TEST_START     = "2024-01-01"
-TEST_END       = "2024-12-31"
-LOOKBACK_DAYS  = 822          # Pre-2024 history: 2021-10-01 to 2023-12-31 (~2.25 years)
-VAL_DAYS       = 0            # No artificial validation holdout; training window runs through T-1
+# BACKTEST WINDOW
+DATA_START    = "2021-10-01"  # first delivery day used for calibration
+TEST_START    = "2024-01-01"
+TEST_END      = "2024-12-31"
+LOOKBACK_DAYS = 822           # rolling calibration window (2021-10-01 to 2023-12-31 for the first test day)
+RUN_DIR       = os.path.join(RESULTS_DIR, f"backtest_{TEST_START[:4]}")
 
-# FEATURE ENGINEERING & TIMING RULES
-SHIFT_QH                  = 8   # 2 hours = 8 quarter-hours lag for ex-post fundamentals
-EFFECTIVE_CUTOFF_MINUTES  = 90  # 60 min gate closure + 30 min reporting buffer
+# INFORMATION SET
+SHIFT_QH                 = 8   # ex-post fundamentals lagged by 2 hours
+EFFECTIVE_CUTOFF_MINUTES = 90  # forecast 60 min before delivery + 30 min publication buffer
 
-# Neighboring contract price trajectories (k relative to target QH)
-NEIGHBOR_QH_OFFSETS       = [-4, -3, -2, -1, 1, 2]
+# Neighboring contracts: latest admissible window of contract s+k (ends 90 min before delivery of s)
 NEIGHBOR_SAFE_VWAP_WINDOWS = {
     -4: "30to45",
     -3: "45to60",
@@ -44,55 +37,57 @@ NEIGHBOR_SAFE_VWAP_WINDOWS = {
     2: "120to135",
 }
 
-# Feature Sets (4 German Delivery Area Partitions)
+# FEATURE SETS
 FEATURE_SET_MACRO       = "set1_macro"
 FEATURE_SET_NEIGHBOR    = "set2_neighbor"
 FEATURE_SET_FUNDAMENTAL = "set3_fundamental"
 FEATURE_SET_BALANCE     = "set4_balance"
-S4_USE_STRUCTURED_RATIOS = True        # Use structured 16-feature flow-to-load and momentum ratios for S4
+FEATURE_SETS = [FEATURE_SET_MACRO, FEATURE_SET_NEIGHBOR, FEATURE_SET_FUNDAMENTAL, FEATURE_SET_BALANCE]
+SET_TAGS     = {FEATURE_SET_MACRO: "s1", FEATURE_SET_NEIGHBOR: "s2", FEATURE_SET_FUNDAMENTAL: "s3", FEATURE_SET_BALANCE: "s4"}
 
-# MODEL HYPERPARAMETERS
+# Correlation filter of Puć & Janczura (2024), applied to S1 and S2 (LASSO, cSVR replication)
+CORR_THRESHOLDS = {FEATURE_SET_MACRO: 0.80, FEATURE_SET_NEIGHBOR: 0.95}
 
 # cSVR (Puć & Janczura, 2024, Eq. 12)
-CSVR_EPSILON                 = 0.1
-CSVR_C                       = 1.0
-CSVR_Q_KERNEL                = 0.75         # Quantile for feature Laplace kernel threshold
-CSVR_Q_DATA                  = 0.5          # Quantile for feature distance normalization
-CSVR_NORM                    = 2            # L2 norm for cdist
-CSVR_USE_GAUSSIAN_CORRECTION = True         # Enable multiplicative Gaussian naive correction (Eq. 12)
-CSVR_Q_KERNEL_NAIVE          = 0.75         # Quantile for naive Gaussian kernel threshold
-CSVR_Q_DATA_NAIVE            = 0.75         # Quantile for naive price difference normalization
-CSVR_CORR_THRESH_S1          = 0.80         # Correlation threshold for S1 Macro
-CSVR_CORR_THRESH_S2          = 0.95         # Correlation threshold for S2 Neighbor
+CSVR_EPSILON        = 0.1
+CSVR_C              = 1.0
+CSVR_Q_KERNEL       = 0.75  # Laplace kernel: theoretical quantile
+CSVR_Q_DATA         = 0.5   # Laplace kernel: empirical quantile of feature distances
+CSVR_Q_KERNEL_NAIVE = 0.75  # Gaussian correction: theoretical quantile
+CSVR_Q_DATA_NAIVE   = 0.75  # Gaussian correction: empirical quantile of squared naive differences
+CSVR_NORM           = 2     # L2 norm in the Laplace kernel
 
 # LASSO
 LASSO_MAX_ITER = 3000
-LASSO_TOL      = 1e-3
-LASSO_CV_DAYS  = 14           # Temporal CV window for alpha selection (last 14 days as holdout folds)
+LASSO_CV_DAYS  = 14         # expanding-window CV over the last 14 calibration days
 
-# MAML-NN (Finn et al., 2017)
-MAML_HIDDEN_SIZES         = [128, 64]
-MAML_ACTIVATION           = "tanh"
-MAML_L1_REG               = 1e-4
-MAML_META_LR              = 5e-4            # Adam learning rate for backbone pre-training
-MAML_INNER_LR             = 0.0025          # Fast inner loop adaptation learning rate
-MAML_INNER_STEPS          = 8               # Gradient steps during fast adaptation
-MAML_PROX_SHRINK          = 1e-5            # Proximal soft-thresholding shrinkage operator
-MAML_BYPASS_MODES         = ["nobypass", "optlasso"] # Active MAML bypass variants ('nobypass', 'optlasso')
-MAML_TRAINING_MODES       = ["warmstart", "maml"]    # Active MAML training variants ('warmstart', 'maml')
-MAML_BYPASS_SATURATION_M  = 0.15            # Smooth tanh saturation scale for linear bypass: p_safe = m * tanh(p_lin / m)
-MAML_SUPPORT_K            = 28              # Number of support days selected for inner adaptation
-MAML_META_EPOCHS          = 6               # Warm-start shared backbone training epochs
-MAML_BILEVEL_EPOCHS       = 5               # Meta-epochs for bilevel MAML training (E_meta in paper)
-MAML_OUTER_CLIP           = 0.5             # Meta-gradient clipping threshold for bilevel MAML (Antoniou et al., 2019)
-MAML_BACKBONE_BATCH       = 256             # Batch size for backbone pre-training
-MAML_META_BATCH           = 16              # FOMAML tasks (QH, query day) averaged per meta-update
-RANDOM_SEED               = 42              # Central deterministic random seed across framework
+# FA-NN (fast local adaptation; Finn et al., 2017 for the FOMAML ablation)
+FANN_HIDDEN_SIZES = [128, 64]
+FANN_ACTIVATION   = "tanh"
+FANN_L1_REG       = 1e-4
+FANN_LR           = 5e-4    # Adam learning rate (backbone pre-training and FOMAML outer loop)
+FANN_EPOCHS       = 6       # backbone pre-training epochs
+FANN_BATCH        = 256     # backbone pre-training batch size
+FANN_SUPPORT_K    = 28      # support days selected for local adaptation
+FANN_INNER_LR     = 0.0025  # local adaptation learning rate
+FANN_INNER_STEPS  = 8       # local adaptation gradient steps
+FANN_PROX_SHRINK  = 1e-5    # soft-thresholding of kernel weights in the inner loop
 
-# Rolling Inverse-MAE Ensemble (Puć & Janczura, 2024; Marcjasz et al., 2018)
-ENSEMBLE_CALIB_DAYS       = 14              # Rolling calibration window in days (W)
-ENSEMBLE_POWER            = 1.0             # Ensemble power parameter (linear weighting)
-ENSEMBLE_QH_ADAPTIVE      = True            # Quarter-hour specific adaptive weighting (prevents D-1 late-night look-ahead)
+# Training modes: "fann" (supervised backbone), "fomaml" (fann + FOMAML), "fomaml_scratch" (FOMAML from random init)
+FANN_TRAINING_MODES = ["fann", "fomaml", "fomaml_scratch"]
+# Optional linear bypass: "none" or "lasso" (network fits the residual of a saturated LASSO forecast)
+FANN_BYPASS_MODES   = ["none", "lasso"]
+FANN_BYPASS_SATURATION_M = 0.15
+
+FOMAML_EPOCHS         = 5   # meta-epochs after the supervised backbone
+FOMAML_SCRATCH_EPOCHS = 8   # compute-matched to backbone pre-training + FOMAML
+FOMAML_META_BATCH     = 16  # tasks per meta-update
+
+RANDOM_SEED = 42
+
+# FORECAST AVERAGING (Marcjasz et al., 2018; Puć & Janczura, 2024): per-product inverse-MAE weights
+ENSEMBLE_CALIB_DAYS = 14
+ENSEMBLE_POWER      = 1.0
 
 # RUNTIME
-N_WORKERS                 = 4               # Parallel CPU workers for multi-zone execution
+N_WORKERS = 4  # parallel zones

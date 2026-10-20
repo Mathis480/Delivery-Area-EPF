@@ -21,14 +21,14 @@
 * Primary reference area: Prioritize DE2 (Amprion) for detailed model comparisons.
 * Naive benchmark: `{zone}_VWAP_90to105` (last observed window at the 90-minute pre-delivery cutoff).
 * National `VWAP_0to30`: Internal imputation fallback only. Never use as target, feature, or benchmark.
-* Publication delay: Nominal 60 min gate closure + 30 min reporting buffer = effective cutoff 90 min before delivery.
+* Information set: forecast issued 60 min before delivery + 30 min publication buffer = data cutoff 90 min before delivery.
 * Neighbor contracts: Window ending $A$ minutes before delivery is safe if $A \ge 90 + 15 \cdot k$ for $k \in [-4, +2]$.
 * Ex-post features: Realized fundamentals (generation, load, balancing) must be lagged by at least 8 quarter-hours (2 hours).
 * No backward fill: `bfill` is prohibited.
-* Feature catalog (`features.csv`):
-  * `yes` (338): Direct features for target contract $k=0$.
-  * `only past products` (52): Safe neighbor windows for $k \in [-4, -1]$. Never use directly for $k=0$.
-  * `no` (520): Inactive variables.
+* Feature catalog (`features.csv`): one row per master-dataset column (1,121).
+  * `tag`: `input` (889), `excluded` (226, e.g. windows after the 90-min cutoff), `label` (5), `index` (1).
+  * `window_end_min`: window end in minutes before delivery of the target contract (neighbors: own window end − 15k); every `input` must be ≥ 90.
+  * Sets S1–S4 are selected from the catalog only; derived S2/S4 columns are built in `feature_engineering.py`, never in the loader.
 
 ## 4. TSO Delivery Area Mapping
 Map German TSOs 1:1 to official EPEX delivery areas:
@@ -54,4 +54,4 @@ Never use raw company names in code, features, or model configs.
   * DE2: `26.6818 EUR/MWh` (RMSE: `133.8644`, Median: `13.9600`)
   * DE3: `27.2725 EUR/MWh`
   * DE4: `27.2536 EUR/MWh`
-* Competition policy: Strict 1:1 evaluation (MAML-NN vs cSVR). Do not create hybrid cross-architecture ensembles.
+* Competition policy: Strict 1:1 evaluation (FA-NN vs cSVR). Do not create hybrid cross-architecture ensembles.
