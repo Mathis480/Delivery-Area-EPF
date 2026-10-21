@@ -47,6 +47,8 @@ SET_TAGS     = {FEATURE_SET_MACRO: "s1", FEATURE_SET_NEIGHBOR: "s2", FEATURE_SET
 
 # Correlation filter of Puć & Janczura (2024), applied to S1 and S2 (LASSO, cSVR replication)
 CORR_THRESHOLDS = {FEATURE_SET_MACRO: 0.80, FEATURE_SET_NEIGHBOR: 0.95}
+# Exact duplicates within a calibration window (e.g. forecast deviation = actual when the solar forecast is zero)
+DUPLICATE_CORR = 1.0 - 1e-10
 
 # cSVR (Puć & Janczura, 2024, Eq. 12)
 CSVR_EPSILON        = 0.1
@@ -64,14 +66,12 @@ LASSO_CV_DAYS  = 14         # expanding-window CV over the last 14 calibration d
 # FA-NN (fast local adaptation; Finn et al., 2017 for the FOMAML ablation)
 FANN_HIDDEN_SIZES = [128, 64]
 FANN_ACTIVATION   = "tanh"
-FANN_L1_REG       = 1e-4
 FANN_LR           = 5e-4    # Adam learning rate (backbone pre-training and FOMAML outer loop)
 FANN_EPOCHS       = 6       # backbone pre-training epochs
 FANN_BATCH        = 256     # backbone pre-training batch size
 FANN_SUPPORT_K    = 28      # support days selected for local adaptation
 FANN_INNER_LR     = 0.0025  # local adaptation learning rate
 FANN_INNER_STEPS  = 8       # local adaptation gradient steps
-FANN_PROX_SHRINK  = 1e-5    # soft-thresholding of kernel weights in the inner loop
 
 # Training modes: "fann" (supervised backbone), "fomaml" (fann + FOMAML), "fomaml_scratch" (FOMAML from random init)
 FANN_TRAINING_MODES = ["fann", "fomaml", "fomaml_scratch"]
@@ -82,6 +82,7 @@ FANN_BYPASS_SATURATION_M = 0.15
 FOMAML_EPOCHS         = 5   # meta-epochs after the supervised backbone
 FOMAML_SCRATCH_EPOCHS = 8   # compute-matched to backbone pre-training + FOMAML
 FOMAML_META_BATCH     = 16  # tasks per meta-update
+FOMAML_LAYER_NORM     = True  # layer normalization before each activation (validated on 2023, 14 of 16 blocks)
 
 RANDOM_SEED = 42
 

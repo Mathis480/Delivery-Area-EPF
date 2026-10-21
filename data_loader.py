@@ -13,7 +13,7 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
 from config import (
-    BENCHMARK_COL_PATTERN, CORR_THRESHOLDS, DATA_START, FEATURE_SET_BALANCE, FEATURE_SET_FUNDAMENTAL,
+    BENCHMARK_COL_PATTERN, CORR_THRESHOLDS, DATA_START, DUPLICATE_CORR, FEATURE_SET_BALANCE, FEATURE_SET_FUNDAMENTAL,
     FEATURE_SET_MACRO, FEATURE_SET_NEIGHBOR, FEATURES_CSV, LOOKBACK_DAYS, MASTER_PARQUET, N_QH, SHIFT_QH,
     TARGET_COL_PATTERN, ZONES,
 )
@@ -109,11 +109,12 @@ class QHDataLoader:
         # Standardization and variable filters are estimated on the calibration window only
         y_mean, y_std = float(np.mean(y_diff[:n_train])), float(np.std(y_diff[:n_train]))
         X_train_raw = X_all[:n_train]
+        # Constant variables and exact duplicates are removed; the correlation filter removes highly correlated ones
         col_mask = np.var(X_train_raw, axis=0) > 1e-8
-        if corr_filter and feature_set in CORR_THRESHOLDS:
-            corr = np.corrcoef(X_train_raw[:, col_mask], rowvar=False)
-            pairs = np.argwhere(np.triu(np.abs(corr) >= CORR_THRESHOLDS[feature_set], 1))
-            col_mask[np.where(col_mask)[0][np.unique(pairs[:, 1])]] = False
+        threshold = CORR_THRESHOLDS[feature_set] if corr_filter and feature_set in CORR_THRESHOLDS else DUPLICATE_CORR
+        corr = np.corrcoef(X_train_raw[:, col_mask], rowvar=False)
+        pairs = np.argwhere(np.triu(np.abs(corr) >= threshold, 1))
+        col_mask[np.where(col_mask)[0][np.unique(pairs[:, 1])]] = False
 
         X_full = StandardScaler().fit(X_train_raw).transform(X_all)
         return WindowData(

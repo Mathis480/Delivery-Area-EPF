@@ -7,6 +7,7 @@ Usage:
     python run_experiment.py                 # backtest all zones in parallel, then print the summary
     python run_experiment.py --zones DE2     # selected zones
     python run_experiment.py --summary       # summary of existing results only
+    python run_experiment.py --models fomaml,fomaml_scratch   # recompute selected models, merge into existing results
 Outputs per zone in RUN_DIR: results_<zone>.npz (forecasts, weights) and runtime_<zone>.csv.
 """
 from __future__ import annotations
@@ -49,7 +50,10 @@ FANN_MODELS = {fann_key(tm, bp): (tm, bp) for tm in FANN_TRAINING_MODES for bp i
 MODELS = ["lasso", "csvr", "csvr_corr", *FANN_MODELS]
 
 
-def run_zone(zone: str) -> str:
+def run_zone(job: tuple[str, list[str]]) -> str:
+    zone, models = job
+    fann_models = {k: v for k, v in FANN_MODELS.items() if k in models}
+    need_lasso = "lasso" in models or any(bp == "lasso" for _, bp in fann_models.values())
     loader = QHDataLoader()
     test = loader.test_targets(zone, TEST_START, TEST_END)
     days = sorted(test["date"].unique())
@@ -60,12 +64,12 @@ def run_zone(zone: str) -> str:
     y_2d[rows, cols] = test["y"].to_numpy()
     naive_2d[rows, cols] = test["naive"].to_numpy()
 
-    preds = {f"{m}_{SET_TAGS[fs]}": np.full_like(y_2d, np.nan) for m in MODELS for fs in FEATURE_SETS}
+    preds = {f"{m}_{SET_TAGS[fs]}": np.full_like(y_2d, np.nan) for m in models for fs in FEATURE_SETS}
     runtime = defaultdict(float)
 
     # FA-NN stage 1: one backbone per training mode, bypass mode and feature set
     nets = {}
-    for key, (tm, bp) in FANN_MODELS.items():
+    for key, (tm, bp) in fann_models.items():
         for fs in FEATURE_SETS:
             t0 = time.perf_counter()
             nets[key, fs] = FastAdaptNN(zone, loader.n_features(zone, fs), fs, training_mode=tm, bypass_mode=bp)
@@ -84,29 +88,32 @@ def run_zone(zone: str) -> str:
             w = loader.get_window(zone, q, row.date, fs, corr_filter=True)
             runtime["data"] += time.perf_counter() - t0
 
-            t0 = time.perf_counter()
-            lasso = train_lasso(w.X_train, w.y_train)
-            p_lasso = lasso.predict(w.X_test)[0]
-            runtime["lasso"] += time.perf_counter() - t0
-            preds[f"lasso_{tag}"][di, q] = back(p_lasso, w)
-
-            t0 = time.perf_counter()
-            p = predict_csvr(train_csvr(w.X_train, w.y_train, w.bm_train), w.X_test, row.naive)[0]
-            dt = time.perf_counter() - t0
-            runtime["csvr_corr"] += dt
-            preds[f"csvr_corr_{tag}"][di, q] = back(p, w)
-            if fs in CORR_THRESHOLDS:  # the filter only affects S1 and S2
-                w_nf = loader.get_window(zone, q, row.date, fs, corr_filter=False)
+            if need_lasso:
                 t0 = time.perf_counter()
-                p = predict_csvr(train_csvr(w_nf.X_train, w_nf.y_train, w_nf.bm_train), w_nf.X_test, row.naive)[0]
-                dt = time.perf_counter() - t0
-                preds[f"csvr_{tag}"][di, q] = back(p, w_nf)
-            else:
-                preds[f"csvr_{tag}"][di, q] = preds[f"csvr_corr_{tag}"][di, q]
-            runtime["csvr"] += dt
+                lasso = train_lasso(w.X_train, w.y_train)
+                p_lasso = lasso.predict(w.X_test)[0]
+                runtime["lasso"] += time.perf_counter() - t0
+                if "lasso" in models:
+                    preds[f"lasso_{tag}"][di, q] = back(p_lasso, w)
 
-            lasso_support = lasso.predict(w.X_train) if "lasso" in FANN_BYPASS_MODES else None
-            for key, (_, bp) in FANN_MODELS.items():
+            if "csvr_corr" in models or "csvr" in models:
+                t0 = time.perf_counter()
+                p = predict_csvr(train_csvr(w.X_train, w.y_train, w.bm_train), w.X_test, row.naive)[0]
+                dt = time.perf_counter() - t0
+                runtime["csvr_corr"] += dt
+                preds[f"csvr_corr_{tag}"][di, q] = back(p, w)
+                if fs in CORR_THRESHOLDS:  # the filter only affects S1 and S2
+                    w_nf = loader.get_window(zone, q, row.date, fs, corr_filter=False)
+                    t0 = time.perf_counter()
+                    p = predict_csvr(train_csvr(w_nf.X_train, w_nf.y_train, w_nf.bm_train), w_nf.X_test, row.naive)[0]
+                    dt = time.perf_counter() - t0
+                    preds[f"csvr_{tag}"][di, q] = back(p, w_nf)
+                else:
+                    preds[f"csvr_{tag}"][di, q] = preds[f"csvr_corr_{tag}"][di, q]
+                runtime["csvr"] += dt
+
+            lasso_support = lasso.predict(w.X_train) if need_lasso else None
+            for key, (_, bp) in fann_models.items():
                 t0 = time.perf_counter()
                 p = nets[key, fs].adapt_and_predict(
                     w.X_train_full, w.y_train, w.X_test_full,
@@ -117,18 +124,25 @@ def run_zone(zone: str) -> str:
                 preds[f"{key}_{tag}"][di, q] = back(p, w)
 
     # Forecast averaging over the four feature sets (per architecture) and LASSO+N (Marcjasz et al., 2020)
-    out = {"dates": np.array(days), "y_true": y_2d, "naive": naive_2d}
-    for m in MODELS:
+    path = os.path.join(RUN_DIR, f"results_{zone}.npz")
+    out = dict(np.load(path)) if os.path.exists(path) and set(models) != set(MODELS) else {}
+    out.update({"dates": np.array(days), "y_true": y_2d, "naive": naive_2d})
+    for m in models:
         members = {SET_TAGS[fs]: preds[f"{m}_{SET_TAGS[fs]}"] for fs in FEATURE_SETS}
         out[f"pred_{m}"], out[f"weights_{m}"] = inverse_mae_average(members, y_2d)
         out.update({f"pred_{m}_{tag}": p for tag, p in members.items()})
-    out["pred_lasso_n"] = 0.5 * out["pred_lasso"] + 0.5 * naive_2d
+    if "lasso" in models:
+        out["pred_lasso_n"] = 0.5 * out["pred_lasso"] + 0.5 * naive_2d
 
     os.makedirs(RUN_DIR, exist_ok=True)
-    np.savez_compressed(os.path.join(RUN_DIR, f"results_{zone}.npz"), **out)
+    np.savez_compressed(path, **out)
     rt = pd.DataFrame({"component": list(runtime), "seconds": list(runtime.values())})
     rt["n_forecasts"] = len(test)
-    rt.to_csv(os.path.join(RUN_DIR, f"runtime_{zone}.csv"), index=False)
+    rt_path = os.path.join(RUN_DIR, f"runtime_{zone}.csv")
+    if os.path.exists(rt_path) and set(models) != set(MODELS):
+        old = pd.read_csv(rt_path)
+        rt = pd.concat([old[~old["component"].isin(rt["component"])], rt], ignore_index=True)
+    rt.to_csv(rt_path, index=False)
     return f"[{zone}] " + " | ".join(f"{k}: {v / 60:.1f} min" for k, v in runtime.items())
 
 
@@ -154,6 +168,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--zones", default=",".join(ZONES), help="comma-separated zones")
     parser.add_argument("--summary", action="store_true", help="only summarize existing results")
+    parser.add_argument("--models", default=",".join(MODELS), help=f"comma-separated subset of {MODELS}")
     args = parser.parse_args()
 
     if not args.summary:
@@ -161,7 +176,7 @@ def main() -> None:
         multiprocessing.set_start_method("spawn", force=True)
         t0 = time.perf_counter()
         with multiprocessing.Pool(processes=min(N_WORKERS, len(zones))) as pool:
-            for msg in pool.map(run_zone, zones):
+            for msg in pool.map(run_zone, [(z, args.models.split(",")) for z in zones]):
                 print(msg)
         print(f"Backtest finished in {(time.perf_counter() - t0) / 60:.1f} min.")
 

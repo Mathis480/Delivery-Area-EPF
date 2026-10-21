@@ -68,7 +68,7 @@ def fig_decoupling() -> None:
     for b, c in zip(bp["boxes"], colors):
         b.set_facecolor(c)
     ax.set_xticks([i * 3 + 0.5 for i in range(len(ZONES))], [f"Control Area {z}" for z in ZONES])
-    ax.set_ylabel("|Zonal − national VWAP| (€/MWh)")
+    ax.set_ylabel("|Zonal − national VWAP| (EUR/MWh)")
     ax.legend([bp["boxes"][0], bp["boxes"][1]], ["90–105 min before delivery", "0–30 min before delivery"],
               loc="upper right")
     _save(fig, "draft_F0_zonal_decoupling")
@@ -136,7 +136,7 @@ def fig_cumulative(zd_all: dict) -> None:
         ax.set_title(f"Control Area {z}")
         ax.xaxis.set_major_locator(mdates.MonthLocator(bymonth=[1, 3, 5, 7, 9, 11]))
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%b"))
-    fig.supylabel("Cumulative difference in daily MAE / 366 (€/MWh)", fontweight="bold", fontsize=9)
+    fig.supylabel("Cumulative difference in daily MAE / 366 (EUR/MWh)", fontweight="bold", fontsize=9)
     axes[0, 0].legend(loc="upper left")
     _save(fig, "draft_F3_cumulative_mae_difference")
 

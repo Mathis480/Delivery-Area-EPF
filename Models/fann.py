@@ -2,12 +2,13 @@
 Neural network with fast local adaptation (FA-NN).
 
 Stage 1 trains a backbone once per zone and feature set on the pooled calibration samples of all 96 products.
-Stage 2 adapts a copy of the backbone for every forecast with a few proximal SGD steps on the K most similar
+Stage 2 adapts a copy of the backbone for every forecast with a few SGD steps on the K most similar
 calibration days (L1 distance) of the same product.
 
 Training modes:
 * ``fann``: supervised backbone (Adam, MAE).
 * ``fomaml``: supervised backbone followed by first-order MAML (Finn et al., 2017), ablation.
+  FOMAML modes use layer normalization before each activation (FOMAML_LAYER_NORM).
 * ``fomaml_scratch``: first-order MAML from random initialization, ablation.
 
 Bypass modes: ``none`` or ``lasso`` (the network fits the residual of a saturated LASSO forecast).
@@ -18,12 +19,12 @@ import numpy as np
 import tensorflow as tf
 from scipy.spatial.distance import cdist
 from tensorflow import keras
-from tensorflow.keras import layers, regularizers
+from tensorflow.keras import layers
 
 from config import (
     CORR_THRESHOLDS, FANN_ACTIVATION, FANN_BATCH, FANN_BYPASS_SATURATION_M, FANN_EPOCHS, FANN_HIDDEN_SIZES,
-    FANN_INNER_LR, FANN_INNER_STEPS, FANN_L1_REG, FANN_LR, FANN_PROX_SHRINK, FANN_SUPPORT_K, FOMAML_EPOCHS,
-    FOMAML_META_BATCH, FOMAML_SCRATCH_EPOCHS, N_QH, RANDOM_SEED, TEST_START,
+    FANN_INNER_LR, FANN_INNER_STEPS, FANN_LR, FANN_SUPPORT_K, FOMAML_EPOCHS,
+    FOMAML_LAYER_NORM, FOMAML_META_BATCH, FOMAML_SCRATCH_EPOCHS, N_QH, RANDOM_SEED, TEST_START,
 )
 from Models.linear import train_lasso
 
@@ -31,14 +32,15 @@ TRAINING_MODES = ("fann", "fomaml", "fomaml_scratch")
 BYPASS_MODES = ("none", "lasso")
 
 
-def build_net(n_features: int, seed: int = RANDOM_SEED) -> keras.Model:
-    """MLP with tanh, layer normalization, L1-regularized kernels and a zero-initialized linear output."""
+def build_net(n_features: int, seed: int = RANDOM_SEED, layer_norm: bool = False) -> keras.Model:
+    """MLP with tanh activations (optionally layer-normalized pre-activations) and a zero-initialized linear output."""
     init = keras.initializers.GlorotUniform(seed=seed)
     x = inp = keras.Input(shape=(n_features,))
     for i, h in enumerate(FANN_HIDDEN_SIZES):
-        x = layers.Dense(h, kernel_initializer=init, kernel_regularizer=regularizers.l1(FANN_L1_REG), name=f"dense_{i}")(x)
+        x = layers.Dense(h, kernel_initializer=init, name=f"dense_{i}")(x)
+        if layer_norm:
+            x = layers.LayerNormalization()(x)
         x = layers.Activation(FANN_ACTIVATION)(x)
-        x = layers.LayerNormalization()(x)
     out = layers.Dense(1, kernel_initializer="zeros", bias_initializer="zeros", name="output")(x)
     model = keras.Model(inp, out)
     model.compile(optimizer=keras.optimizers.Adam(learning_rate=FANN_LR), loss=keras.losses.MeanAbsoluteError())
@@ -59,7 +61,7 @@ class FastAdaptNN:
             raise ValueError(f"Unknown mode: {training_mode}/{bypass_mode}")
         self.zone, self.feature_set, self.seed = zone, feature_set, seed
         self.training_mode, self.bypass_mode = training_mode, bypass_mode
-        self._model = build_net(n_features, seed=seed)
+        self._model = build_net(n_features, seed=seed, layer_norm=FOMAML_LAYER_NORM and training_mode != "fann")
         self._vars = self._model.trainable_variables
         self._backbone: list[np.ndarray] | None = None
 
@@ -85,21 +87,19 @@ class FastAdaptNN:
 
     @tf.function(reduce_retracing=True)
     def _inner_adapt(self, xs: tf.Tensor, ys: tf.Tensor) -> None:
-        """Stage 2: FANN_INNER_STEPS proximal SGD steps on the support set (in place)."""
+        """Stage 2: FANN_INNER_STEPS SGD steps on the support set (in place)."""
         for _ in range(FANN_INNER_STEPS):
             with tf.GradientTape() as tape:
                 loss = tf.reduce_mean(tf.abs(ys - self._model(xs, training=False)))
             for v, g in zip(self._vars, tape.gradient(loss, self._vars)):
                 v.assign_sub(FANN_INNER_LR * g)
-                if "kernel" in v.name:
-                    v.assign(tf.sign(v) * tf.maximum(0.0, tf.abs(v) - FANN_PROX_SHRINK))
 
     @tf.function(reduce_retracing=True)
     def _query_grad(self, xs, ys, xq, yq) -> list[tf.Tensor]:
         """First-order meta-gradient: adapt on the support set, gradient of the query loss at the adapted weights."""
         self._inner_adapt(xs, ys)
         with tf.GradientTape() as tape:
-            q_loss = tf.reduce_mean(tf.abs(yq - self._model(xq, training=False))) + tf.add_n(self._model.losses)
+            q_loss = tf.reduce_mean(tf.abs(yq - self._model(xq, training=False)))
         return tape.gradient(q_loss, self._vars)
 
     def _fomaml(self, X_by_qh: list[np.ndarray], y_by_qh: list[np.ndarray], epochs: int) -> None:
