@@ -29,7 +29,7 @@ Each model is estimated per zone, product and feature set (S1–S4); the four se
 
 The EPEX SPOT transaction data are not public; the dataset cannot be shared. Fundamentals (Fraunhofer ISE energy-charts) and balancing energy (netztransparenz.de) are public.
 
-`features.csv` lists every column of the master dataset once: `tag` (`input`, `excluded`, `label`, `index`), set membership (S1–S4), `shift_needed_2h` (ex-post data lagged by 2 h), `window_end_min` (end of the trading window in minutes before delivery of the target contract) and `derived_from`.
+`features.csv` lists every column of the master dataset once: `tag` (`input`, `excluded`, `label`, `index`), set membership (S1–S4), `ex_post_lag_qh` (lag of ex-post data in quarter-hours until publication at the forecast time: 6 for balancing energy, 9 for ENTSO-E actuals), `window_end_min` (end of the trading window in minutes before delivery of the target contract) and `derived_from`.
 
 ## Reproduction
 
@@ -37,6 +37,7 @@ The EPEX SPOT transaction data are not public; the dataset cannot be shared. Fun
 pip install -r requirements.txt
 jupyter execute create_master_dataset.ipynb   # raw data -> Data/master_dataset.parquet (incl. feature_engineering.py)
 python run_experiment.py                       # backtest -> Results/backtest_2024/results_<zone>.npz, runtime_<zone>.csv, summary.csv
+python Evaluation/make_tables.py               # tables -> Contribution/tables/*.tex, Results/backtest_2024/tables/*.csv
 python Evaluation/draft_figures.py             # figures -> Evaluation/plots/drafts/
 ```
 

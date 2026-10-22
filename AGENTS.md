@@ -23,10 +23,10 @@
 * National `VWAP_0to30`: Internal imputation fallback only. Never use as target, feature, or benchmark.
 * Information set: forecast issued 60 min before delivery + 30 min publication buffer = data cutoff 90 min before delivery.
 * Neighbor contracts: Window ending $A$ minutes before delivery is safe if $A \ge 90 + 15 \cdot k$ for $k \in [-4, +2]$.
-* Ex-post features: Realized fundamentals (generation, load, balancing) must be lagged by at least 8 quarter-hours (2 hours).
+* Ex-post features: Realized values must be published by the forecast time (60 min before delivery); delay counts from the end of the quarter-hour. Balancing energy (netztransparenz, 15 min delay): lag 6 QH. ENTSO-E actuals (load, generation, cross-border; 60 min delay): lag 9 QH. Lags per column in `features.csv` (`ex_post_lag_qh`).
 * No backward fill: `bfill` is prohibited.
-* Feature catalog (`features.csv`): one row per master-dataset column (1,121).
-  * `tag`: `input` (889), `excluded` (226, e.g. windows after the 90-min cutoff), `label` (5), `index` (1).
+* Feature catalog (`features.csv`): one row per master-dataset column (1,221).
+  * `tag`: `input` (961), `excluded` (254, e.g. windows after the 90-min cutoff), `label` (5), `index` (1).
   * `window_end_min`: window end in minutes before delivery of the target contract (neighbors: own window end − 15k); every `input` must be ≥ 90.
   * Sets S1–S4 are selected from the catalog only; derived S2/S4 columns are built in `feature_engineering.py`, never in the loader.
 

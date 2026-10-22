@@ -6,7 +6,10 @@ Guiding principle: lean paper. Three tables and three to four figures in the mai
 
 | ID | Content | Status |
 | :--- | :--- | :--- |
-| T1 | MAE, rMAE, RMSE per control area: Naive, LASSO, LASSO + Naive (Marcjasz et al., 2020), cSVR (main, no filter), cSVR (filter, replication of Puć & Janczura), FA-NN | table script to write |
+| T1 | rMAE and rRMSE per control area, stage 1: Naive, LASSO, LASSO+N, cSVR (published, with filter), FOMAML (no pre-training), FA-NN; DM stars vs. naive | `make_tables.py` → `tab_main` |
+| T1b | Pairwise DM/GW: FA-NN vs. cSVR and vs. FOMAML (no pre-training) | `make_tables.py` → `tab_dm_gw` |
+| T3b | Stage 2 (post hoc): cSVR w/o filter, bypass variants, FOMAML after pre-training vs. base model | `make_tables.py` → `tab_stage2` |
+| A1 | S4 contribution (leave-S4-out averaging, encompassing test), post hoc | `make_tables.py` → `tab_s4` (appendix) |
 | F1 | One-sided daily-vector DM chessboard (HAC, h = 7), 4 panels (DE1–DE4) | draft: `plots/drafts/draft_F1_dm_chessboard.png` |
 | T2 | Runtime: calibration time per zone (LASSO, cSVR, FA-NN Stage 1 once + Stage 2 per forecast) vs. NN with daily full retraining | measurement missing |
 | T3 | Ablation: FA-NN vs. FOMAML (warm start), FOMAML (scratch), backbone without adaptation (G = 0) | data available after rerun; G = 0 from `Results/sensitivity_inner_steps_DE2.npz` |

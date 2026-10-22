@@ -12,7 +12,8 @@ from scipy.spatial.distance import cdist
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 from config import (
-    FEATURE_SET_MACRO, FEATURE_SET_NEIGHBOR, FEATURES_CSV, MASTER_PARQUET, SHIFT_QH, TEST_END, TEST_START,
+    FEATURE_SET_MACRO, FEATURE_SET_NEIGHBOR, FEATURES_CSV, LAG_QH_BALANCING, LAG_QH_ENTSOE, MASTER_PARQUET, TEST_END,
+    TEST_START,
 )
 from Models.csvr import _kernel, train_csvr
 from Models.ensemble import dm_test, gw_test, inverse_mae_average
@@ -42,13 +43,13 @@ class TestData(unittest.TestCase):
         self.assertLess(w.X_train.shape[1], w.X_train_full.shape[1])  # correlation filter active on S1
 
     def test_ex_post_features_are_lagged(self):
-        catalog = pd.read_csv(FEATURES_CSV)
-        col = catalog.loc[catalog["shift_needed_2h"] == "x", "name"].iloc[0]
         q, day = 40, "2024-06-15"
         row = self.loader._qh_tables[q]
         row = row[row["_delivery_date"] == pd.Timestamp(day).date()]
         idx = self.master.index[self.master["Date"] == row["Date"].iloc[0]][0]
-        self.assertEqual(row[col].iloc[0], self.master.loc[idx - SHIFT_QH, col])
+        for col, lag in (("DE2_SRL_positive", LAG_QH_BALANCING), ("DE2_load_actual", LAG_QH_ENTSOE),
+                         ("DE_cross_border_trading", LAG_QH_ENTSOE)):
+            self.assertEqual(row[col].iloc[0], self.master.loc[idx - lag, col], col)
 
     def test_neighbor_features_point_to_admissible_windows(self):
         m = self.master

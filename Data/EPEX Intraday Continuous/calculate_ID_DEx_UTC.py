@@ -1,7 +1,8 @@
 #%%
 """
 Pre-aggregates raw EPEX Intraday Continuous sub-second tick trades (2021-2024)
-into 15-minute lead-time windows (VWAP, volume, trade count, flow balances)
+into 15-minute lead-time windows (VWAP, volume, trade count, net/bilateral/external
+balances, intra-area volume)
 for German TSO control areas (DE1-DE4) and national aggregate (DE) in pure UTC.
 
 See README.md for full methodology, window definitions, and schema.
@@ -57,29 +58,42 @@ def calculate_total_trades(df_subset: pd.DataFrame) -> int:
         return np.nan
 
 
+IMPORT_TYPES = ['import', 'ext_import']
+EXPORT_TYPES = ['export', 'ext_export']
+
+
+def _net_balance(df_subset: pd.DataFrame, mask: pd.Series) -> float:
+    temp_df = df_subset[mask]
+    signed = np.where(temp_df['TradeTyp'].isin(EXPORT_TYPES), -temp_df['Volume'], temp_df['Volume'])
+    return np.round(signed.sum(), 3)
+
+
 def calculate_idbalance(df_subset: pd.DataFrame) -> float:
-    """Calculate net trade balance (imports positive, exports negative) in MWh."""
+    """Net trade balance (imports positive, exports negative) in MWh: German areas plus external counterparties."""
     if df_subset['Volume'].sum() == 0:
         return np.nan
-    temp_df = df_subset[df_subset['TradeTyp'].isin(['export', 'import'])].copy()
-    temp_df['Volume'] = np.where(temp_df['TradeTyp'] == 'export', -temp_df['Volume'], temp_df['Volume'])
-    return np.round(temp_df['Volume'].sum(), 3)
+    return _net_balance(df_subset, df_subset['TradeTyp'].isin(IMPORT_TYPES + EXPORT_TYPES))
 
 
 def calculate_idbalance_to_zone(df_subset: pd.DataFrame, zone_code: str) -> float:
-    """Calculate bilateral net trade balance with a specific German TSO zone."""
+    """Bilateral net trade balance with a specific German delivery area."""
     if df_subset['Volume'].sum() == 0:
         return np.nan
-    temp_df = df_subset[df_subset['TradeTyp'].isin(['export', 'import']) & (df_subset['DeliveryArea'] == zone_code)].copy()
-    temp_df['Volume'] = np.where(temp_df['TradeTyp'] == 'export', -temp_df['Volume'], temp_df['Volume'])
-    return np.round(temp_df['Volume'].sum(), 3)
+    return _net_balance(df_subset, df_subset['TradeTyp'].isin(['export', 'import']) & (df_subset['DeliveryArea'] == zone_code))
 
 
-def calculate_idbalance_to_self(df_subset: pd.DataFrame) -> float:
-    """Calculate internal trading volume within the same delivery zone."""
+def calculate_idbalance_ext(df_subset: pd.DataFrame) -> float:
+    """Net trade balance with external counterparties (single-leg XBID trades, area outside the EPEX DE order book)."""
     if df_subset['Volume'].sum() == 0:
         return np.nan
-    temp_df = df_subset[df_subset['TradeTyp'] == 'self']
+    return _net_balance(df_subset, df_subset['TradeTyp'].isin(['ext_export', 'ext_import']))
+
+
+def calculate_trade_intra(df_subset: pd.DataFrame) -> float:
+    """Volume traded between two parties within the same delivery area."""
+    if df_subset['Volume'].sum() == 0:
+        return np.nan
+    temp_df = df_subset[df_subset['TradeTyp'] == 'intra']
     return np.round(temp_df['Volume'].sum(), 3)
 
 
@@ -90,7 +104,7 @@ def calculate_metrics(
     interval_name: str, 
     window_names: list
 ) -> dict:
-    """Compute 9 window metrics; forward-fills VWAP and zeroes volumes if no trades occurred."""
+    """Compute 10 window metrics; forward-fills VWAP and zeroes volumes if no trades occurred."""
     if df.empty:
         prev_vwap = window_metrics_list[-1].get(f'VWAP_{window_names[window_idx-1]}', np.nan) if window_metrics_list else np.nan
         return {
@@ -102,7 +116,8 @@ def calculate_metrics(
             f'id_balance_to_DE2_{interval_name}': 0,
             f'id_balance_to_DE3_{interval_name}': 0,
             f'id_balance_to_DE4_{interval_name}': 0,
-            f'id_trade_to_self_{interval_name}': 0,
+            f'id_balance_ext_{interval_name}': 0,
+            f'id_trade_intra_{interval_name}': 0,
         }
 
     return {
@@ -114,15 +129,23 @@ def calculate_metrics(
         f'id_balance_to_DE2_{interval_name}': calculate_idbalance_to_zone(df, 'DE2'),
         f'id_balance_to_DE3_{interval_name}': calculate_idbalance_to_zone(df, 'DE3'),
         f'id_balance_to_DE4_{interval_name}': calculate_idbalance_to_zone(df, 'DE4'),
-        f'id_trade_to_self_{interval_name}': calculate_idbalance_to_self(df),
+        f'id_balance_ext_{interval_name}': calculate_idbalance_ext(df),
+        f'id_trade_intra_{interval_name}': calculate_trade_intra(df),
     }
 
 
-def classify_trade_direction(delivery_area: str, side: str, target_area: str) -> str:
-    """Classify trade direction from counterparty perspective ('self', 'export', 'import')."""
+def classify_trade_direction(delivery_area: str, side: str, target_area: str, n_legs: int) -> str:
+    """Classify a trade leg relative to the target area ('intra', 'export', 'import', 'ext_export', 'ext_import').
+
+    Two-leg trades: both legs are in the EPEX DE order book; the leg outside the target area is the
+    counterparty, so its side is inverted. Single-leg trades (XBID with RemoteTradeId): the counterparty
+    is outside the EPEX DE order book and the only leg is the target area's own leg.
+    """
+    if n_legs == 1:
+        return 'ext_import' if side == 'BUY' else 'ext_export'  # Own leg buys -> target area imports
     is_same_area = str(delivery_area).startswith('DE') if target_area == 'DE' else (delivery_area == target_area)
     if is_same_area:
-        return 'self'
+        return 'intra'
     elif side == 'BUY':
         return 'export'  # Counterparty buys -> target area exports
     else:
@@ -164,15 +187,16 @@ def process_single_trade_file(args: tuple) -> pd.DataFrame:
         if df_trades.empty:
             return None
 
-        # 5. Classify trade direction from counterparty perspective:
-        # Counterparty BUYS -> target area exports; Counterparty SELLS -> target area imports
-        sides = df_trades['Side'] if 'Side' in df_trades.columns else ['BUY'] * len(df_trades)
+        # 5. Classify trade direction (two-leg trades from the counterparty leg, single-leg trades from the own leg)
+        n_legs = df_trades.groupby('TradeId')['TradeId'].transform('size')
+        if (n_legs > 2).any():
+            raise ValueError(f"TradeIds with more than two legs in {file_path}")
         df_trades['TradeTyp'] = [
-            classify_trade_direction(area, side, target_area)
-            for area, side in zip(df_trades['DeliveryArea'], sides)
+            classify_trade_direction(area, side, target_area, n)
+            for area, side, n in zip(df_trades['DeliveryArea'], df_trades['Side'], n_legs)
         ]
 
-        # 5.1 Deduplicate trades: sort so cross-border legs are prioritized and retain one unique record per TradeId
+        # 5.1 Deduplicate trades: sort so inter-area legs ('export'/'import') precede 'intra' and retain one record per TradeId
         df_trades = df_trades.sort_values(by=['TradeId', 'TradeTyp'], ascending=True)
         df_trades = df_trades.drop_duplicates(subset='TradeId', keep='first')
 

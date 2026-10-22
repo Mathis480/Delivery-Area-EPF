@@ -21,24 +21,25 @@ Raw trade executions are partitioned into 25 discrete lead-time windows prior to
 * **24 Continuous Pre-Delivery Windows:** 15-minute increments from `345to360` down to `0to15` minutes prior to delivery.
 * **1 Target Window:** `0to30` minutes prior to delivery (used as forecasting target).
 
-### Window Metrics (9 Variables per Lead-Time Window)
+### Window Metrics (10 Variables per Lead-Time Window)
 For each delivery quarter-hour and lead-time window $w$:
 * `VWAP_{w}`: Volume-Weighted Average Price (EUR/MWh). Forward-filled horizontally if no trades occurred.
 * `VWAP_total_volume_{w}`: Total traded volume (MWh). Filled with 0 if no trades occurred.
 * `VWAP_total_trades_{w}`: Number of executed transactions. Filled with 0 if no trades occurred.
-* `id_balance_{w}`: Net cross-border trade balance (Imports $-$ Exports).
-* `id_balance_to_DE1_{w}` ... `id_balance_to_DE4_{w}`: Bilateral trade balance with specific German TSO area.
-* `id_trade_to_self_{w}`: Purely internal trading volume within the same delivery zone.
+* `id_balance_{w}`: Net trade balance (imports $-$ exports, MWh) with all counterparties outside the area; equals the sum of the bilateral and the external balances.
+* `id_balance_to_DE1_{w}` ... `id_balance_to_DE4_{w}`: Bilateral net balance with a specific German delivery area (two-leg trades).
+* `id_balance_ext_{w}`: Net balance with external counterparties (single-leg XBID trades with `RemoteTradeId`; counterparty outside the EPEX DE order book, e.g. a foreign bidding zone or another NEMO).
+* `id_trade_intra_{w}`: Volume traded between two parties within the same delivery area.
 
-Total feature dimension: 25 windows $\times$ 9 metrics $+$ `DeliveryStart` = 226 columns per annual file.
+Total feature dimension: 25 windows $\times$ 10 metrics $+$ `DeliveryStart` = 251 columns per annual file.
 
 ## 3. Data Processing & Quality Control (`calculate_ID_DEx_UTC.py`)
 
 Raw tick data is pre-aggregated offline via `calculate_ID_DEx_UTC.py`:
-1. **Contract Filtering:** Restricts trades to exactly 15-minute delivery duration (`DeliveryEnd - DeliveryStart == 900s`).
-2. **Wash Trade Removal:** Excludes internal self-trades (`SelfTrade == 'N'`).
-3. **Deduplication:** Aligns buyer and seller records to prevent double-counting of matched trades.
-4. **Direction Classification:** Classifies each trade leg relative to the target area (`self`, `import`, or `export`).
+1. **Contract Filtering:** Restricts trades to the products `Intraday_Quarter_Hour_Power` and `XBID_Quarter_Hour_Power`.
+2. **Wash Trade Removal:** Keeps only genuine trades (`SelfTrade == 'N'`).
+3. **Direction Classification:** Two-leg trades (both legs in the EPEX DE order book) are classified from the counterparty leg as `intra`, `import` or `export`. Single-leg trades (XBID, counterparty outside the EPEX DE order book) are classified from the own leg as `ext_import` (own leg BUY) or `ext_export` (own leg SELL). Single-leg trades are kept in all price, volume and trade-count metrics.
+4. **Deduplication:** One record per `TradeId`, so matched buy and sell legs are not double-counted.
 5. **Parallel Execution:** Distributed via `ProcessPoolExecutor` across available CPU cores.
 
 ## 4. Directory Inventory
@@ -53,7 +54,6 @@ Data/EPEX Intraday Continuous/
 ├── ID_DelArea_DE4_2021.csv ...     # Processed annual 15-min series (DE4, 2021-2024)
 ├── ID_DelArea_DE_2021.csv ...      # Processed annual 15-min series (DE, 2021-2024)
 ├── calculate_ID_DEx_UTC.py         # Offline ETL tick aggregator script
-├── validate_and_calculate_indices.py # Validation script against official indices
 └── README.md
 ```
 
@@ -61,8 +61,8 @@ Data/EPEX Intraday Continuous/
 
 | File Pattern | Rows / Year | Columns | Description |
 | :--- | :---: | :---: | :--- |
-| `ID_DelArea_DE1_{year}.csv` | ~35,040 | 226 | TransnetBW delivery area continuous trade metrics |
-| `ID_DelArea_DE2_{year}.csv` | ~35,040 | 226 | Amprion delivery area continuous trade metrics |
-| `ID_DelArea_DE3_{year}.csv` | ~35,040 | 226 | TenneT delivery area continuous trade metrics |
-| `ID_DelArea_DE4_{year}.csv` | ~35,040 | 226 | 50Hertz delivery area continuous trade metrics |
-| `ID_DelArea_DE_{year}.csv` | ~35,040 | 226 | National German aggregate continuous trade metrics |
+| `ID_DelArea_DE1_{year}.csv` | ~35,040 | 251 | TransnetBW delivery area continuous trade metrics |
+| `ID_DelArea_DE2_{year}.csv` | ~35,040 | 251 | Amprion delivery area continuous trade metrics |
+| `ID_DelArea_DE3_{year}.csv` | ~35,040 | 251 | TenneT delivery area continuous trade metrics |
+| `ID_DelArea_DE4_{year}.csv` | ~35,040 | 251 | 50Hertz delivery area continuous trade metrics |
+| `ID_DelArea_DE_{year}.csv` | ~35,040 | 251 | National German aggregate continuous trade metrics |

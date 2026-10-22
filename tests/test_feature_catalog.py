@@ -7,11 +7,11 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import EFFECTIVE_CUTOFF_MINUTES, FEATURES_CSV, MASTER_PARQUET, ZONES
+from config import EFFECTIVE_CUTOFF_MINUTES, FEATURES_CSV, LAG_QH_BALANCING, LAG_QH_ENTSOE, MASTER_PARQUET, ZONES
 
 SETS = ["S1", "S2", "S3", "S4"]
 EXPECTED_COUNTS = {  # zone -> (S1, S2, S3, S4), as reported in the paper (Table FeatureSets)
-    "DE1": (89, 31, 31, 16), "DE2": (89, 31, 31, 16), "DE3": (89, 31, 34, 16), "DE4": (89, 31, 34, 16),
+    "DE1": (92, 31, 31, 16), "DE2": (92, 31, 31, 16), "DE3": (92, 31, 34, 16), "DE4": (92, 31, 34, 16),
 }
 
 
@@ -34,6 +34,15 @@ class TestFeatureCatalog(unittest.TestCase):
         inputs = self.cat[self.cat["tag"] == "input"]
         late = inputs[inputs["window_end_min"].notna() & (inputs["window_end_min"] < EFFECTIVE_CUTOFF_MINUTES)]
         self.assertTrue(late.empty, late["name"].tolist())
+
+    def test_ex_post_lags(self):
+        """Actual values are lagged until published at the forecast time: balancing 15 min, ENTSO-E 60 min delay."""
+        lagged = self.cat.dropna(subset=["ex_post_lag_qh"])
+        balancing = lagged["name"].str.contains(r"_(SRL|MRL)_")
+        self.assertTrue((lagged.loc[balancing, "ex_post_lag_qh"] == LAG_QH_BALANCING).all())
+        self.assertTrue((lagged.loc[~balancing, "ex_post_lag_qh"] == LAG_QH_ENTSOE).all())
+        actual = self.cat["name"].str.contains(r"_(actual|diff)$|cross_border|_(SRL|MRL)_")
+        self.assertTrue(self.cat.loc[actual, "ex_post_lag_qh"].notna().all())
 
     def test_set_sizes(self):
         inputs = self.cat[self.cat["tag"] == "input"]

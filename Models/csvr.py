@@ -27,10 +27,12 @@ class CSVRModel:
     sigma: float              # Gaussian correction scale
 
 
-def _kernel(model: CSVRModel, X: np.ndarray, bm_std: np.ndarray) -> np.ndarray:
-    laplace = model.width * cdist(X, model.X_train, metric=METRIC)
+def _kernel(model: CSVRModel, X: np.ndarray, bm_std: np.ndarray, dist: np.ndarray | None = None) -> np.ndarray:
+    """Kernel against the calibration days; `dist` reuses an already computed feature distance matrix."""
+    if dist is None:
+        dist = cdist(X, model.X_train, metric=METRIC)
     correction = (1.0 / (2.0 * model.sigma ** 2)) * np.abs(bm_std[:, None] - model.bm_train_std[None, :]) ** 2
-    return np.exp(laplace - correction)
+    return np.exp(model.width * dist - correction)
 
 
 def train_csvr(X_train: np.ndarray, y_train: np.ndarray, bm_train: np.ndarray) -> CSVRModel:
@@ -44,7 +46,7 @@ def train_csvr(X_train: np.ndarray, y_train: np.ndarray, bm_train: np.ndarray) -
 
     model = CSVRModel(SVR(kernel="precomputed", epsilon=CSVR_EPSILON, C=CSVR_C), X_train, bm_train_std,
                       bm_mean, bm_std, width, sigma)
-    model.svr.fit(_kernel(model, X_train, bm_train_std), y_train)
+    model.svr.fit(_kernel(model, X_train, bm_train_std, dist=dist), y_train)
     return model
 
 

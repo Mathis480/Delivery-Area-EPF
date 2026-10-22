@@ -1,6 +1,7 @@
 """
 Rolling inverse-MAE forecast averaging (Marcjasz et al., 2018; Puć & Janczura, 2024) and
-statistical tests on daily loss vectors (Diebold & Mariano, 1995; Giacomini & White, 2006).
+statistical tests on daily loss vectors (Diebold & Mariano, 1995; Giacomini & White, 2006;
+Harvey, Leybourne & Newbold, 1998).
 """
 from __future__ import annotations
 
@@ -66,3 +67,13 @@ def gw_test(loss_a: np.ndarray, loss_b: np.ndarray) -> tuple[float, float]:
     r2 = 1 - np.mean((np.ones(n) - z @ beta) ** 2)
     stat = float(n * r2 * np.sign(d.mean()))
     return stat, float(1 - scipy.stats.chi2.cdf(stat, z.shape[1]))
+
+
+def encompassing_test(err_a: np.ndarray, err_b: np.ndarray, h: int = 7) -> tuple[float, float]:
+    """Forecast encompassing test (Harvey, Leybourne & Newbold, 1998) on daily means, Newey-West variance (lag h).
+
+    d_t = mean over products of e_a * (e_a - e_b). One-sided p-value for H1: forecast B contains
+    information not contained in forecast A (A does not encompass B).
+    """
+    d = np.nanmean(err_a * (err_a - err_b), axis=1)
+    return dm_test(d, np.zeros_like(d), h=h)

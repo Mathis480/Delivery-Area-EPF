@@ -24,7 +24,10 @@ LOOKBACK_DAYS = 822           # rolling calibration window (2021-10-01 to 2023-1
 RUN_DIR       = os.path.join(RESULTS_DIR, f"backtest_{TEST_START[:4]}")
 
 # INFORMATION SET
-SHIFT_QH                 = 8   # ex-post fundamentals lagged by 2 hours
+# Ex-post data must be published by the forecast time (60 min before delivery); the publication delay counts from the
+# end of a quarter-hour, so lag = (60 + delay + 15) / 15 quarter-hours relative to the target delivery (features.csv)
+LAG_QH_BALANCING = 6  # netztransparenz.de operational aFRR/mFRR: published 15 min after the quarter-hour
+LAG_QH_ENTSOE    = 9  # ENTSO-E actual load/generation (and cross-border trading): up to 60 min after the quarter-hour
 EFFECTIVE_CUTOFF_MINUTES = 90  # forecast 60 min before delivery + 30 min publication buffer
 
 # Neighboring contracts: latest admissible window of contract s+k (ends 90 min before delivery of s)
@@ -47,6 +50,8 @@ SET_TAGS     = {FEATURE_SET_MACRO: "s1", FEATURE_SET_NEIGHBOR: "s2", FEATURE_SET
 
 # Correlation filter of Puć & Janczura (2024), applied to S1 and S2 (LASSO, cSVR replication)
 CORR_THRESHOLDS = {FEATURE_SET_MACRO: 0.80, FEATURE_SET_NEIGHBOR: 0.95}
+# Exogenous variables exempt from the correlation filter, as in Puć & Janczura (2024): auction prices (incl. lags), weekday dummies
+CORR_FILTER_EXEMPT_PREFIXES = ("Dayahead_Auction_hourly", "Intraday Auction Price", "Weekday_")
 # Exact duplicates within a calibration window (e.g. forecast deviation = actual when the solar forecast is zero)
 DUPLICATE_CORR = 1.0 - 1e-10
 

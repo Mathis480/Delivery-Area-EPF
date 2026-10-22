@@ -1,7 +1,7 @@
 """
 Data loader for rolling quarter-hour (QH) forecasting.
 
-Loads the master dataset, lags ex-post features by 2 hours, selects the feature sets S1-S4 from
+Loads the master dataset, lags ex-post features until their publication (features.csv), selects the feature sets S1-S4 from
 features.csv and provides standardized calibration/test arrays per (zone, product, test day).
 """
 from __future__ import annotations
@@ -13,8 +13,8 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
 from config import (
-    BENCHMARK_COL_PATTERN, CORR_THRESHOLDS, DATA_START, DUPLICATE_CORR, FEATURE_SET_BALANCE, FEATURE_SET_FUNDAMENTAL,
-    FEATURE_SET_MACRO, FEATURE_SET_NEIGHBOR, FEATURES_CSV, LOOKBACK_DAYS, MASTER_PARQUET, N_QH, SHIFT_QH,
+    BENCHMARK_COL_PATTERN, CORR_FILTER_EXEMPT_PREFIXES, CORR_THRESHOLDS, DATA_START, DUPLICATE_CORR, FEATURE_SET_BALANCE, FEATURE_SET_FUNDAMENTAL,
+    FEATURE_SET_MACRO, FEATURE_SET_NEIGHBOR, FEATURES_CSV, LOOKBACK_DAYS, MASTER_PARQUET, N_QH,
     TARGET_COL_PATTERN, ZONES,
 )
 
@@ -48,9 +48,9 @@ class QHDataLoader:
         if missing:
             raise ValueError(f"features.csv lists columns missing in the master dataset: {missing[:10]}")
 
-        # Ex-post features are lagged by 2 hours
-        shift_cols = catalog.loc[catalog["shift_needed_2h"] == "x", "name"].tolist()
-        df[shift_cols] = df[shift_cols].shift(SHIFT_QH)
+        # Ex-post features are lagged until they are published at the forecast time (lag per column in features.csv)
+        for lag, cols in catalog.dropna(subset=["ex_post_lag_qh"]).groupby("ex_post_lag_qh")["name"]:
+            df[cols.tolist()] = df[cols.tolist()].shift(int(lag))
 
         # Feature sets per zone; catalog order defines column order
         inputs = catalog[catalog["tag"] == "input"]
@@ -58,6 +58,7 @@ class QHDataLoader:
             (zone, fs): inputs.loc[inputs["model"].isin(["all", zone]) & inputs[col].notna(), "name"].tolist()
             for zone in ZONES for fs, col in SET_COLUMNS.items()
         }
+        self._exempt = {k: np.array([n.startswith(CORR_FILTER_EXEMPT_PREFIXES) for n in v]) for k, v in self._features.items()}
 
         df["_qh_idx"] = (df["Date"].dt.hour * 4 + df["Date"].dt.minute // 15).astype(np.int8)
         df["_delivery_date"] = df["Date"].dt.date
@@ -110,10 +111,14 @@ class QHDataLoader:
         y_mean, y_std = float(np.mean(y_diff[:n_train])), float(np.std(y_diff[:n_train]))
         X_train_raw = X_all[:n_train]
         # Constant variables and exact duplicates are removed; the correlation filter removes highly correlated ones
-        col_mask = np.var(X_train_raw, axis=0) > 1e-8
+        # Exact constancy (scale-free): the load-normalized S4 ratios are of order 1e-4, so a variance threshold would drop real signals
+        col_mask = np.ptp(X_train_raw, axis=0) > 0
         threshold = CORR_THRESHOLDS[feature_set] if corr_filter and feature_set in CORR_THRESHOLDS else DUPLICATE_CORR
-        corr = np.corrcoef(X_train_raw[:, col_mask], rowvar=False)
-        pairs = np.argwhere(np.triu(np.abs(corr) >= threshold, 1))
+        corr = np.abs(np.triu(np.corrcoef(X_train_raw[:, col_mask], rowvar=False), 1))
+        # As in Puć & Janczura (2024), exogenous variables are exempt from the correlation filter (not from exact duplicates)
+        filterable = ~self._exempt[(zone, feature_set)][col_mask]
+        hit = (corr >= DUPLICATE_CORR) | ((corr >= threshold) & filterable[:, None] & filterable[None, :])
+        pairs = np.argwhere(hit)
         col_mask[np.where(col_mask)[0][np.unique(pairs[:, 1])]] = False
 
         X_full = StandardScaler().fit(X_train_raw).transform(X_all)

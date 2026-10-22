@@ -9,7 +9,8 @@ variable filters) stays in data_loader.py.
 * S2 (neighboring contracts): VWAP of the latest admissible window of contract s+k, spread to the own
   naive price, spread to the national neighbor VWAP, traded volume and trade count. The window of
   contract s+k ends 90 + 15k minutes before its own delivery, i.e. 90 minutes before delivery of s.
-* S4 (inter-zonal trade balances): net, bilateral and self-trade balances aggregated over trading
+* S4 (inter-zonal trade balances): net balance (German areas plus external XBID counterparties),
+  bilateral balances to the other German areas and intra-area traded volume, aggregated over trading
   phases and normalized by the zonal day-ahead load forecast.
 
 Usage: python feature_engineering.py   (appends/overwrites the derived columns in MASTER_PARQUET)
@@ -108,20 +109,20 @@ def build_balance_features(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, li
                 bal_series[col] = _phase_sum([f"{zone}_id_balance_to_{pz}_{w}" for w in wins]) / load
                 s4_features[zone].append(col)
 
-        # 3. Self-trade ratios across phases (4)
+        # 3. Intra-area trade ratios across phases (4)
         for p_name, wins in PHASES:
-            col = f"{zone}_id_trade_to_self_ratio_{p_name}"
-            bal_series[col] = _phase_sum([f"{zone}_id_trade_to_self_{w}" for w in wins]) / load
+            col = f"{zone}_id_trade_intra_ratio_{p_name}"
+            bal_series[col] = _phase_sum([f"{zone}_id_trade_intra_{w}" for w in wins]) / load
             s4_features[zone].append(col)
 
-        # 4. Balance momentum and closing self-trade ratio (2)
+        # 4. Balance momentum and closing intra-area trade ratio (2)
         b_90, b_105 = _phase_sum([f"{zone}_id_balance_90to105"]), _phase_sum([f"{zone}_id_balance_105to120"])
         col = f"{zone}_id_balance_diff_ratio_90to120"
         bal_series[col] = (b_90 - b_105) / load
         s4_features[zone].append(col)
 
-        col = f"{zone}_id_trade_to_self_closing_ratio_90to105"
-        bal_series[col] = _phase_sum([f"{zone}_id_trade_to_self_90to105"]) / load
+        col = f"{zone}_id_trade_intra_closing_ratio_90to105"
+        bal_series[col] = _phase_sum([f"{zone}_id_trade_intra_90to105"]) / load
         s4_features[zone].append(col)
 
     return pd.DataFrame(bal_series, index=df.index), s4_features
