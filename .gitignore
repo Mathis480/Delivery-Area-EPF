@@ -1,0 +1,72 @@
+# Data and result files (EPEX data are proprietary)
+*.csv
+*.tsv
+*.parquet
+*.feather
+*.arrow
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.npy
+*.npz
+*.db
+*.duckdb
+*.sqlite
+*.sqlite3
+*.xlsx
+*.xls
+*.zip
+*.tar
+*.gz
+*.bz2
+*.7z
+*.rar
+*.pdf
+*.log
+*.txt
+*.json
+
+# Raw data
+Data/Raw/
+Data/Transactions/
+Data/EPEX Intraday Continuous/*.csv
+Data/EPEX Intraday Continuous/*.zip
+
+# Python & Environment artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+.ipynb_checkpoints/
+.pytest_cache/
+
+# IDE & OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Whitelist: code and documentation
+!*.py
+!*.ipynb
+!*.md
+!.gitkeep
+!.gitignore
+!features.csv
+!features.yaml
+!requirements.txt
+
+# Archive
+old/
+Old
+Old/
+scratch/
+
+# Manuscript
+Contribution/
+
