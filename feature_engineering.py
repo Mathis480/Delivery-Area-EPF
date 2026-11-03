@@ -3,7 +3,7 @@ Deterministic, row-wise feature engineering for the master dataset.
 
 Derived features that do not depend on a calibration window are materialized here as columns of
 master_dataset.parquet, so that every model input exists physically in the master dataset and is
-registered in features.csv. Window-dependent preprocessing (2h ex-post shift, standardization,
+registered in features.csv. Window-dependent preprocessing (ex-post lag per column, `ex_post_lag_qh`: 6 QH balancing, 9 QH ENTSO-E; standardization,
 variable filters) stays in data_loader.py.
 
 * S2 (neighboring contracts): VWAP of the latest admissible window of contract s+k, spread to the own

@@ -51,6 +51,7 @@ def save(table, name, caption, label):
     df = pd.DataFrame(table).T
     tex = df.to_latex(escape=False, caption=caption, label=label, position="htbp",
                       column_format="l" * df.index.nlevels + "c" * df.shape[1])
+    os.makedirs(os.path.join(ROOT, "Contribution", "tables"), exist_ok=True)
     with open(os.path.join(ROOT, "Contribution", "tables", f"{name}.tex"), "w") as f:
         f.write(tex.replace("\\cline{1-6}\n\\bottomrule", "\\bottomrule").replace("\\cline{1-6}", "\\midrule")
                 .replace("\\begin{tabular}", "\\centering\\small\\setlength{\\tabcolsep}{4pt}\n\\begin{tabular}"))

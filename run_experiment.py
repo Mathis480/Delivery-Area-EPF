@@ -1,6 +1,6 @@
 """
 Rolling out-of-sample backtest for all control areas (DE1-DE4):
-Naive, LASSO, LASSO+N, cSVR (main, without correlation filter), cSVR replication (with filter),
+Naive, LASSO, LASSO+N, cSVR replication (with correlation filter, main benchmark), cSVR without filter (post hoc),
 FA-NN and its variants (FOMAML, FOMAML from scratch, LASSO bypass, static backbone without adaptation).
 
 Usage:

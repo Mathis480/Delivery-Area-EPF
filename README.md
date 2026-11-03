@@ -45,17 +45,43 @@ The EPEX SPOT transaction data are not public. The dataset cannot be shared. Fun
 
 ## Reproduction
 
+All results were computed on CPU with Python 3.11.15 and the package versions pinned in `requirements.txt`:
+
 ```bash
+conda create -n deep_learning python=3.11.15
+conda activate deep_learning
 pip install -r requirements.txt
-jupyter execute create_master_dataset.ipynb   # raw data -> Data/master_dataset.parquet (incl. feature_engineering.py)
-python run_experiment.py                       # backtest -> Results/backtest_2024/results_<zone>.npz, runtime_<zone>.csv, summary.csv
-python Evaluation/make_tables.py               # tables -> Contribution/tables/*.tex, Results/backtest_2024/tables/*.csv
-python Evaluation/draft_figures.py             # figures -> Evaluation/plots/drafts/
-python Evaluation/runtime_benchmark.py         # single-thread runtimes -> Results/runtime_benchmark/
-python run_experiment.py --models fann --seed 1  # seed robustness -> Results/backtest_2024/seed_1/
 ```
 
-All settings are in `config.py`.
+Run from the repository root, in this order:
+
+```bash
+# 1. Data (raw files as described in Data/*/README.md)
+python "Data/EPEX Intraday Continuous/calculate_ID_DEx_UTC.py"  # raw EPEX trades -> ID_DelArea_<area>_<year>.csv
+jupyter execute create_master_dataset.ipynb   # -> Data/master_dataset.parquet (incl. feature_engineering.py); outputs are not written back
+python -m unittest discover -s tests          # consistency tests
+python tests/feature_snapshot.py              # loader regression check against hashes in tests/fixtures/ (not in the repository; create with --update)
+
+# 2. Backtest 2024
+python run_experiment.py                      # all models -> Results/backtest_2024/results_<zone>.npz, runtime_<zone>.csv, summary.csv
+for s in 1 2 3 4; do python run_experiment.py --models fann --seed $s; python run_experiment.py --models fomaml,fomaml_scratch --seed $s; done  # seed robustness -> Results/backtest_2024/seed_<s>/
+
+# 3. Validation on 2023 (layer normalization) and diagnostics
+Q2023=2023-01-01:2023-03-31,2023-04-01:2023-06-30,2023-07-01:2023-09-30,2023-10-01:2023-12-31
+python Evaluation/variant_pretest.py --zones DE1,DE2,DE3,DE4 --periods $Q2023 current ln_pre
+python Evaluation/variant_pretest.py --mode fomaml_scratch --zones DE1,DE2,DE3,DE4 --periods $Q2023 current ln_pre
+python Evaluation/variant_pretest.py ln reg ln_reg             # regularization / layer normalization on DE2, Q4 2023
+python Evaluation/fomaml_diagnostics.py       # FOMAML diagnostics and sensitivity (Q4 2023) -> Evaluation/plots/drafts/
+python Evaluation/runtime_benchmark.py        # single-thread runtimes -> Results/runtime_benchmark/
+
+# 4. Paper tables, figures and numbers
+python Evaluation/make_tables.py              # -> Contribution/tables/tab_main.tex, tab_dm_gw.tex, tab_stage2.tex
+python Evaluation/data_figures.py             # -> Contribution/SVG/Figure_1.pdf, Figure_2.pdf, Contribution/tables/trade_balances.tex
+python Evaluation/text_numbers.py             # numbers quoted in the text that are not in the tables (printed)
+python Evaluation/draft_figures.py            # draft result figures -> Evaluation/plots/drafts/
+```
+
+The map of the control areas and the timeline of the forecasting setup are drawn by hand (draw.io), not generated. All settings are in `config.py`.
 
 ## Result files
 

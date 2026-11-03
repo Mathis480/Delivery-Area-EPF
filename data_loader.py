@@ -73,6 +73,17 @@ class QHDataLoader:
         self._qh_dates = {q: t["_delivery_date"].values for q, t in self._qh_tables.items()}
         assert len(self._qh_tables) == N_QH
 
+        # Numeric copy of all used columns per product: window rows are gathered in numpy (a pandas row take copies all columns)
+        used = list(dict.fromkeys(
+            [n for names in self._features.values() for n in names]
+            + [p.format(zone=z) for z in ZONES for p in (TARGET_COL_PATTERN, BENCHMARK_COL_PATTERN)]
+        ))
+        pos = {n: i for i, n in enumerate(used)}
+        self._qh_arrays = {q: t[used].to_numpy(np.float64) for q, t in self._qh_tables.items()}
+        self._col_idx = {k: np.array([pos[n] for n in v]) for k, v in self._features.items()}
+        self._bm_idx = {z: pos[BENCHMARK_COL_PATTERN.format(zone=z)] for z in ZONES}
+        self._target_idx = {z: pos[TARGET_COL_PATTERN.format(zone=z)] for z in ZONES}
+
         cols = ["Date", "_delivery_date", "_slot"]
         cols += [p.format(zone=z) for z in ZONES for p in (TARGET_COL_PATTERN, BENCHMARK_COL_PATTERN)]
         self._targets = df[cols]
@@ -108,11 +119,13 @@ class QHDataLoader:
             return None
 
         # Calibration ends before the test day, also for the second delivery of the autumn DST day
-        w_df = self._qh_tables[product].iloc[np.r_[max(0, first - lookback_days): first, first + occurrence]]
-        n_train = len(w_df) - 1
-        X_all = w_df[self.feature_names(zone, feature_set)].values.astype(np.float64)
-        bm = w_df[BENCHMARK_COL_PATTERN.format(zone=zone)].values.astype(np.float64)
-        y_diff = w_df[TARGET_COL_PATTERN.format(zone=zone)].values.astype(np.float64) - bm
+        rows = np.r_[max(0, first - lookback_days): first, first + occurrence]
+        arr = self._qh_arrays[product]
+        n_train = len(rows) - 1
+        # Column-major as pandas .values: the layout sets the summation order of the scaler and thus the last bits
+        X_all = np.asfortranarray(arr[rows[:, None], self._col_idx[(zone, feature_set)]])
+        bm = arr[rows, self._bm_idx[zone]]
+        y_diff = arr[rows, self._target_idx[zone]] - bm
 
         # Standardization and variable filters are estimated on the calibration window only
         y_mean, y_std = float(np.mean(y_diff[:n_train])), float(np.std(y_diff[:n_train]))
