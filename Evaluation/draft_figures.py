@@ -2,6 +2,7 @@
 Draft figures for the results section (not yet part of the paper).
 
 Usage: python Evaluation/draft_figures.py [results_dir]   (default: RUN_DIR from config)
+Model names as in the paper: cSVR = with correlation filter, FOMAML = without pre-training (post-hoc variants excluded).
 Figures (PDF + PNG) are written to Evaluation/plots/drafts/.
 """
 from __future__ import annotations
@@ -31,9 +32,9 @@ plot_style.apply()
 MODEL_KEYS = {
     "Naive": "naive",
     "LASSO": "pred_lasso",
-    "LASSO+N": "pred_lasso_n",
-    "cSVR (filter)": "pred_csvr_corr",
-    "cSVR": "pred_csvr",
+    "LASSO+Naive": "pred_lasso_n",
+    "cSVR": "pred_csvr_corr",
+    "FOMAML": "pred_fomaml",
     "FA-NN": "pred_fann",
 }
 COL, LS = plot_style.MODEL_COLORS, plot_style.MODEL_LINESTYLES
@@ -111,14 +112,14 @@ def fig_rmae_by_hour(zd: dict, zone: str = "DE2") -> None:
     naive_err = np.abs(zd["Naive"] - zd["y"])
     fig, ax = plt.subplots(figsize=(plot_style.TEXT_WIDTH_IN, 2.6))
     ax.axhline(1.0, color=COL["Naive"], linestyle=LS["Naive"], linewidth=1.0, label="Naive")
-    for lab in ("LASSO", "cSVR", "FA-NN"):
+    for lab in ("LASSO", "cSVR", "FOMAML", "FA-NN"):
         err = np.abs(zd[lab] - zd["y"])
         r = [np.nanmean(err[:, hours == h]) / np.nanmean(naive_err[:, hours == h]) for h in range(24)]
         ax.plot(range(24), r, color=COL[lab], label=lab, marker="o", markersize=3)
     ax.set_xlabel("Delivery hour (local time)"); ax.set_ylabel("rMAE")
     ax.set_xticks(range(24), [f"{h:02d}" for h in range(24)])
     ax.set_xlim(-0.5, 23.5)
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.18), ncol=4)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.18), ncol=5)
     _save(fig, f"draft_F2_rmae_by_hour_{zone}")
 
 

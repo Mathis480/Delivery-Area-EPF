@@ -11,7 +11,7 @@ Price forecasting for the final 30 minutes of the German continuous intraday mar
 | `DE3` | `DE-TPS` |
 | `DE4` | `DE-50HZ` |
 
-Target: zonal VWAP of the window 0–30 min before delivery (`{zone}_VWAP_0to30`), forecast 60 min before delivery with information available 90 min before delivery. Naive benchmark: `{zone}_VWAP_90to105`. Test period: calendar year 2024 (35,136 quarter-hours per zone), rolling calibration window of 822 days.
+Target: zonal VWAP of the window 0–30 min before delivery (`{zone}_VWAP_0to30`), forecast 60 min before delivery using only information published by then, with continuous trades up to 90 min before delivery. Naive benchmark: `{zone}_VWAP_90to105`. Test period: calendar year 2024 (35,136 quarter-hours per zone), rolling calibration window of 822 days.
 
 ## AI Disclosure
 
@@ -19,6 +19,7 @@ This project was created with assistance of generative AI.
 
 - **Author:** Mathis Wilz. The experiment has existed since early 2023 without AI and has been developed continuously. At their core, idea, code and text come from the author.
 - **Claude Opus 5.5 (Anthropic):** code, data analysis and paper revision.
+- **Argon (Google):** code and paper review.
 - **Gemini 3.5 to 3.8 Flash (Google):** coding.
 - **Earlier models:** DeepSeek Pro v4 and DeepSeek Coder (hosted locally), coding.
 
@@ -32,8 +33,8 @@ This project was created with assistance of generative AI.
 | `csvr` | cSVR without correlation filter (post-hoc modification) |
 | `fann` | Neural network with fast local adaptation (main model) |
 | `fann_static` | Model variant: FA-NN backbone without local adaptation (G = 0) |
-| `fomaml`, `fomaml_scratch` | Model variants: first-order MAML initialization |
-| `*_bypass` | FA-NN with LASSO bypass: fits the residual of a saturated LASSO forecast (post-hoc modification) |
+| `fomaml`, `fomaml_pre` | Model variants: first-order MAML without / after supervised pre-training |
+| `fann_bypass` | FA-NN with LASSO bypass: fits the residual of a saturated LASSO forecast (post-hoc modification) |
 
 Each model is estimated per zone, product and feature set (S1–S4); the four set forecasts are combined with rolling inverse-MAE weights.
 
@@ -64,19 +65,19 @@ python tests/feature_snapshot.py              # loader regression check against 
 
 # 2. Backtest 2024
 python run_experiment.py                      # all models -> Results/backtest_2024/results_<zone>.npz, runtime_<zone>.csv, summary.csv
-for s in 1 2 3 4; do python run_experiment.py --models fann --seed $s; python run_experiment.py --models fomaml,fomaml_scratch --seed $s; done  # seed robustness -> Results/backtest_2024/seed_<s>/
+for s in 1 2 3 4; do python run_experiment.py --models fann --seed $s; python run_experiment.py --models fomaml,fomaml_pre --seed $s; done  # seed robustness -> Results/backtest_2024/seed_<s>/
 
 # 3. Validation on 2023 (layer normalization) and diagnostics
 Q2023=2023-01-01:2023-03-31,2023-04-01:2023-06-30,2023-07-01:2023-09-30,2023-10-01:2023-12-31
 python Evaluation/variant_pretest.py --zones DE1,DE2,DE3,DE4 --periods $Q2023 current ln_pre
-python Evaluation/variant_pretest.py --mode fomaml_scratch --zones DE1,DE2,DE3,DE4 --periods $Q2023 current ln_pre
+python Evaluation/variant_pretest.py --mode fomaml --zones DE1,DE2,DE3,DE4 --periods $Q2023 current ln_pre
 python Evaluation/variant_pretest.py ln reg ln_reg             # regularization / layer normalization on DE2, Q4 2023
 python Evaluation/fomaml_diagnostics.py       # FOMAML diagnostics and sensitivity (Q4 2023) -> Evaluation/plots/drafts/
 python Evaluation/runtime_benchmark.py        # single-thread runtimes -> Results/runtime_benchmark/
 
 # 4. Paper tables, figures and numbers
-python Evaluation/make_tables.py              # -> Contribution/tables/tab_main.tex, tab_dm_gw.tex, tab_stage2.tex
-python Evaluation/data_figures.py             # -> Contribution/SVG/Figure_1.pdf, Figure_2.pdf, Contribution/tables/trade_balances.tex
+python Evaluation/make_tables.py              # -> Contribution/tables/tab_main.tex, tab_dm_gw.tex, tab_stage2.tex, tab_runtime.tex
+python Evaluation/data_figures.py             # -> Contribution/SVG/Figure_1.pdf, Figure_2.pdf
 python Evaluation/text_numbers.py             # numbers quoted in the text that are not in the tables (printed)
 python Evaluation/draft_figures.py            # draft result figures -> Evaluation/plots/drafts/
 ```

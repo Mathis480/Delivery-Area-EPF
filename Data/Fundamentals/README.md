@@ -16,7 +16,7 @@ File names: `energy-charts_<VARIABLE>_Forecasts_and_actual_values_in_<Germany | 
 
 ## Use in the master dataset
 
-Feature names `{zone}_{load|solar|wind_onshore|wind_offshore}_{actual|forecast|diff}` and `DE_cross_border_trading`. Forecasts are known the day before. Actual values (and the derived forecast errors) are lagged by 9 quarter-hours: published 60 min after the end of the quarter-hour (Reg. (EU) 543/2013, Art. 6.1(a), 16.1(b)) and available at the forecast time; see `ex_post_lag_qh` in `features.csv`.
+Feature names `{zone}_{load|solar|wind_onshore|wind_offshore}_{actual|forecast|diff}` and `DE_cross_border_trading`. Forecasts are known the day before. Actual values (and the derived forecast errors) are lagged by 9 quarter-hours: published 60 min after the end of the quarter-hour (Reg. (EU) 543/2013, Art. 6(2)(a), 16(2)(b)) and available at the forecast time; see `ex_post_lag_qh` in `features.csv`.
 
 ## Download
 

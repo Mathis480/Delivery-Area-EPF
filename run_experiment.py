@@ -1,13 +1,14 @@
 """
 Rolling out-of-sample backtest for all control areas (DE1-DE4):
 Naive, LASSO, LASSO+N, cSVR replication (with correlation filter, main benchmark), cSVR without filter (post hoc),
-FA-NN and its variants (FOMAML, FOMAML from scratch, LASSO bypass, static backbone without adaptation).
+FA-NN and its variants (FOMAML without pre-training, FOMAML after pre-training, LASSO bypass (post hoc), static backbone
+without adaptation).
 
 Usage:
     python run_experiment.py                 # backtest all zones in parallel, then print the summary
     python run_experiment.py --zones DE2     # selected zones
     python run_experiment.py --summary       # summary of existing results only
-    python run_experiment.py --models fomaml,fomaml_scratch   # recompute selected models, merge into existing results
+    python run_experiment.py --models fomaml,fomaml_pre       # recompute selected models, merge into existing results
     python run_experiment.py --models fann --seed 1           # seed robustness, written to RUN_DIR/seed_1
 Outputs per zone in RUN_DIR: results_<zone>.npz (forecasts, weights) and runtime_<zone>.csv.
 """
@@ -30,7 +31,7 @@ from sklearn.exceptions import ConvergenceWarning
 from tqdm import tqdm
 
 from config import (
-    CORR_THRESHOLDS, FANN_BYPASS_MODES, FANN_TRAINING_MODES, FEATURE_SETS, N_SLOTS, N_WORKERS, RANDOM_SEED, RUN_DIR,
+    CORR_THRESHOLDS, FANN_TRAINING_MODES, FEATURE_SETS, N_SLOTS, N_WORKERS, RANDOM_SEED, RUN_DIR,
     SET_TAGS, TEST_END, TEST_START, ZONES,
 )
 from data_loader import QHDataLoader
@@ -43,11 +44,8 @@ from Models.linear import train_lasso
 warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
 
-def fann_key(training_mode: str, bypass_mode: str) -> str:
-    return training_mode if bypass_mode == "none" else f"{training_mode}_bypass"
-
-
-FANN_MODELS = {fann_key(tm, bp): (tm, bp) for tm in FANN_TRAINING_MODES for bp in FANN_BYPASS_MODES}
+FANN_MODELS = {tm: (tm, "none") for tm in FANN_TRAINING_MODES}
+FANN_MODELS["fann_bypass"] = ("fann", "lasso")  # LASSO bypass, FA-NN only (post hoc)
 FANN_MODELS["fann_static"] = ("fann", "none")  # backbone without local adaptation (G = 0)
 MODELS = ["lasso", "csvr", "csvr_corr", *FANN_MODELS]
 
@@ -99,21 +97,26 @@ def run_zone(job: tuple[str, list[str], int, str]) -> str:
                 if "lasso" in models:
                     preds[f"lasso_{tag}"][di, q] = back(p_lasso, w)
 
-            if "csvr_corr" in models or "csvr" in models:
+            # cSVR with correlation filter (csvr_corr) and without (csvr); the filter only affects S1 and S2,
+            # so in S3/S4 both models share one fit
+            filtered = fs in CORR_THRESHOLDS
+            if "csvr_corr" in models or ("csvr" in models and not filtered):
                 t0 = time.perf_counter()
                 p = predict_csvr(train_csvr(w.X_train, w.y_train, w.bm_train), w.X_test, row.naive)[0]
                 dt = time.perf_counter() - t0
-                runtime["csvr_corr"] += dt
-                preds[f"csvr_corr_{tag}"][di, q] = back(p, w)
-                if fs in CORR_THRESHOLDS:  # the filter only affects S1 and S2
-                    w_nf = loader.get_window(zone, q, row.date, fs, corr_filter=False)
-                    t0 = time.perf_counter()
-                    p = predict_csvr(train_csvr(w_nf.X_train, w_nf.y_train, w_nf.bm_train), w_nf.X_test, row.naive)[0]
-                    dt = time.perf_counter() - t0
-                    preds[f"csvr_{tag}"][di, q] = back(p, w_nf)
-                else:
-                    preds[f"csvr_{tag}"][di, q] = preds[f"csvr_corr_{tag}"][di, q]
-                runtime["csvr"] += dt
+                p = back(p, w)
+                if "csvr_corr" in models:
+                    runtime["csvr_corr"] += dt
+                    preds[f"csvr_corr_{tag}"][di, q] = p
+                if "csvr" in models and not filtered:
+                    runtime["csvr"] += dt
+                    preds[f"csvr_{tag}"][di, q] = p
+            if "csvr" in models and filtered:
+                w_nf = loader.get_window(zone, q, row.date, fs, corr_filter=False)
+                t0 = time.perf_counter()
+                p = predict_csvr(train_csvr(w_nf.X_train, w_nf.y_train, w_nf.bm_train), w_nf.X_test, row.naive)[0]
+                runtime["csvr"] += time.perf_counter() - t0
+                preds[f"csvr_{tag}"][di, q] = back(p, w_nf)
 
             lasso_support = lasso.predict(w.X_train) if need_lasso else None
             for key, (_, bp) in fann_models.items():
@@ -153,7 +156,10 @@ def summarize(run_dir: str = RUN_DIR) -> pd.DataFrame:
     """MAE per model and zone (tests and paper tables: Evaluation/make_tables.py)."""
     table = {}
     for zone in ZONES:
-        d = np.load(os.path.join(run_dir, f"results_{zone}.npz"))
+        path = os.path.join(run_dir, f"results_{zone}.npz")
+        if not os.path.exists(path):  # zones not (yet) computed in this run directory
+            continue
+        d = np.load(path)
         table[zone] = {m: np.nanmean(np.abs(d["naive" if m == "naive" else f"pred_{m}"] - d["y_true"]))
                        for m in ["naive", *MODELS, "lasso_n"] if m == "naive" or f"pred_{m}" in d}
     table = pd.DataFrame(table)

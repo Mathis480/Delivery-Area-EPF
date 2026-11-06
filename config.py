@@ -83,16 +83,14 @@ FANN_SUPPORT_K    = 28      # support days selected for local adaptation
 FANN_INNER_LR     = 0.0025  # local adaptation learning rate
 FANN_INNER_STEPS  = 8       # local adaptation gradient steps
 
-# Training modes: "fann" (supervised backbone), "fomaml" (fann + FOMAML), "fomaml_scratch" (FOMAML from random init)
-FANN_TRAINING_MODES = ["fann", "fomaml", "fomaml_scratch"]
-# Optional linear bypass: "none" or "lasso" (network fits the residual of a saturated LASSO forecast)
-FANN_BYPASS_MODES   = ["none", "lasso"]
+# Training modes: "fann" (supervised backbone), "fomaml" (FOMAML without pre-training), "fomaml_pre" (fann + FOMAML)
+FANN_TRAINING_MODES = ["fann", "fomaml", "fomaml_pre"]
+# Optional LASSO bypass of the FA-NN (network fits the residual of a saturated LASSO forecast; Models.fann.BYPASS_MODES)
 FANN_BYPASS_SATURATION_M = 0.15
 
-FOMAML_EPOCHS         = 5   # meta-epochs after the supervised backbone
-FOMAML_SCRATCH_EPOCHS = 8   # compute-matched to backbone pre-training + FOMAML
+FOMAML_EPOCHS         = 8   # meta-epochs without pre-training, compute-matched to backbone pre-training + FOMAML_PRE_EPOCHS
+FOMAML_PRE_EPOCHS     = 5   # meta-epochs after the supervised backbone (fomaml_pre)
 FOMAML_META_BATCH     = 16  # tasks per meta-update
-FOMAML_LAYER_NORM     = True  # layer normalization before each activation (validated on 2023, 12 of 16 blocks)
 
 RANDOM_SEED = 42
 

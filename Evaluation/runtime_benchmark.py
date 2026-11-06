@@ -41,7 +41,7 @@ from Models.fann import FastAdaptNN
 from Models.linear import train_lasso
 
 OUT_DIR = os.path.join(RESULTS_DIR, "runtime_benchmark")
-NN_MODES = ["fann", "fomaml_scratch"]
+NN_MODES = ["fann", "fomaml"]
 
 
 def cpu_name() -> str:
@@ -70,7 +70,9 @@ def main() -> None:
             nets[mode, fs].pretrain(loader)
             stage1[mode] += time.perf_counter() - t0
 
-    def forecast(row, timed: bool) -> None:
+    def forecast(row, timed: bool, i: int = 0) -> None:
+        # the first network after the data access pays ~3 ms of cache misses, so the order alternates
+        modes = NN_MODES if i % 2 == 0 else NN_MODES[::-1]
         for fs in FEATURE_SETS:
             times = {}
             t0 = time.perf_counter()
@@ -92,7 +94,7 @@ def main() -> None:
             else:
                 times["csvr"] = times["csvr_corr"]
 
-            for mode in NN_MODES:
+            for mode in modes:
                 t0 = time.perf_counter()
                 nets[mode, fs].adapt_and_predict(w.X_train_full, w.y_train, w.X_test_full)
                 times[f"{mode}_stage2"] = time.perf_counter() - t0
@@ -101,8 +103,8 @@ def main() -> None:
                     per_fc[k] += v
 
     forecast(next(sample.itertuples(index=False)), timed=False)  # warm-up (tf.function tracing)
-    for row in sample.itertuples(index=False):
-        forecast(row, timed=True)
+    for i, row in enumerate(sample.itertuples(index=False)):
+        forecast(row, timed=True, i=i)
 
     n, n_year = len(sample), len(test)
     rows = [{"component": f"{m}_stage1", "ms_per_forecast": np.nan, "min_per_zone_year": s / 60} for m, s in stage1.items()]

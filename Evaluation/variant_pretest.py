@@ -7,7 +7,7 @@ Every period is an out-of-sample block: the backbone is trained on the data befo
 Variants:
     current  no layer normalization (FA-NN as in Models.fann)
     ln       + layer normalization after every hidden activation (Dense -> tanh -> LN, as in the earlier backtest)
-    ln_pre   + layer normalization before every activation (Dense -> LN -> tanh, as in Ba et al., 2016; FOMAML in Models.fann)
+    ln_pre   + layer normalization before every activation (Dense -> LN -> tanh, as in Ba et al., 2016)
     reg      + L1 kernel penalty (1e-4) in Stage 1 and soft-thresholding (1e-5) in Stage 2
     ln_reg, ln_pre_reg   combinations (ln_reg = configuration of the earlier backtest)
 Design decisions use pre-test periods (2023). Runs on the test year are diagnostics only.
@@ -17,8 +17,9 @@ Done (DE2 Q4 2023): current 20.8494, ln 20.8598, reg 20.9428 (worse, DM p=0.015)
 Decision rule for ln_pre vs. current (fixed before the 2023 validation, 4 zones x 4 quarters):
 adopt ln_pre only if its mean MAE over the 16 blocks is lower AND it is better in at least 9 of 16 blocks.
 Result (2026-11-02, local product grid): ln_pre mean +0.0365 EUR/MWh, better in 3 of 16 blocks -> current kept.
-Same rule for FOMAML without pre-training (--mode fomaml_scratch): ln_pre vs. current on the same 16 blocks.
-Result (2026-11-02): ln_pre mean -0.0236 EUR/MWh, better in 12 of 16 blocks -> ln_pre adopted for FOMAML.
+Same rule for FOMAML without pre-training (--mode fomaml; named fomaml_scratch until 2026-11-05): ln_pre vs. current on the same 16 blocks.
+Result (2026-11-02): ln_pre mean -0.0236 EUR/MWh, better in 12 of 16 blocks. LN removed from all models on 2026-11-05
+(simplicity; FOMAML after pre-training was never validated with LN).
 """
 from __future__ import annotations
 
@@ -125,7 +126,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("variants", nargs="+", choices=list(VARIANTS))
     parser.add_argument("--zones", default="DE2")
-    parser.add_argument("--mode", default="fann", choices=["fann", "fomaml", "fomaml_scratch"])
+    parser.add_argument("--mode", default="fann", choices=["fann", "fomaml", "fomaml_pre"])
     parser.add_argument("--periods", default="2023-10-01:2023-12-31", help="comma-separated start:end blocks")
     args = parser.parse_args()
     periods = [tuple(p.split(":")) for p in args.periods.split(",")]

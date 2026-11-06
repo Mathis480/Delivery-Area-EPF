@@ -49,7 +49,7 @@ def dm_test(loss_a: np.ndarray, loss_b: np.ndarray, h: int = 7) -> tuple[float, 
     """
     d = loss_a - loss_b
     n, d_bar = len(d), d.mean()
-    gamma = [np.mean((d[k:] - d_bar) * (d[: n - k] - d_bar)) for k in range(h + 1)]
+    gamma = [np.sum((d[k:] - d_bar) * (d[: n - k] - d_bar)) / n for k in range(h + 1)]  # Newey & West (1987): 1/n
     var = gamma[0] + 2 * sum((1 - k / (h + 1)) * gamma[k] for k in range(1, h + 1))
     stat = float(d_bar / np.sqrt(var / n))
     return stat, float(1 - scipy.stats.norm.cdf(stat))

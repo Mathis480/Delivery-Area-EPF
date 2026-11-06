@@ -7,9 +7,8 @@ calibration days (L1 distance) of the same product.
 
 Training modes:
 * ``fann``: supervised backbone (Adam, MAE).
-* ``fomaml``: supervised backbone followed by first-order MAML (Finn et al., 2017), model variant.
-  FOMAML modes use layer normalization before each activation (FOMAML_LAYER_NORM).
-* ``fomaml_scratch``: first-order MAML from random initialization, model variant.
+* ``fomaml``: first-order MAML (Finn et al., 2017) without supervised pre-training, model variant.
+* ``fomaml_pre``: supervised backbone followed by first-order MAML, model variant.
 
 Bypass modes: ``none`` or ``lasso`` (the network fits the residual of a saturated LASSO forecast).
 With ``adapt=False``, Stage 2 is skipped (static backbone, G = 0).
@@ -25,22 +24,20 @@ from tensorflow.keras import layers
 from config import (
     CORR_THRESHOLDS, FANN_ACTIVATION, FANN_BATCH, FANN_BYPASS_SATURATION_M, FANN_EPOCHS, FANN_HIDDEN_SIZES,
     FANN_INNER_LR, FANN_INNER_STEPS, FANN_LR, FANN_SUPPORT_K, FOMAML_EPOCHS,
-    FOMAML_LAYER_NORM, FOMAML_META_BATCH, FOMAML_SCRATCH_EPOCHS, N_QH, RANDOM_SEED, TEST_START,
+    FOMAML_META_BATCH, FOMAML_PRE_EPOCHS, N_QH, RANDOM_SEED, TEST_START,
 )
 from Models.linear import train_lasso
 
-TRAINING_MODES = ("fann", "fomaml", "fomaml_scratch")
+TRAINING_MODES = ("fann", "fomaml", "fomaml_pre")
 BYPASS_MODES = ("none", "lasso")
 
 
-def build_net(n_features: int, seed: int = RANDOM_SEED, layer_norm: bool = False) -> keras.Model:
-    """MLP with tanh activations (optionally layer-normalized pre-activations) and a zero-initialized linear output."""
+def build_net(n_features: int, seed: int = RANDOM_SEED) -> keras.Model:
+    """MLP with tanh activations and a zero-initialized linear output."""
     init = keras.initializers.GlorotUniform(seed=seed)
     x = inp = keras.Input(shape=(n_features,))
     for i, h in enumerate(FANN_HIDDEN_SIZES):
         x = layers.Dense(h, kernel_initializer=init, name=f"dense_{i}")(x)
-        if layer_norm:
-            x = layers.LayerNormalization()(x)
         x = layers.Activation(FANN_ACTIVATION)(x)
     out = layers.Dense(1, kernel_initializer="zeros", bias_initializer="zeros", name="output")(x)
     model = keras.Model(inp, out)
@@ -62,7 +59,7 @@ class FastAdaptNN:
             raise ValueError(f"Unknown mode: {training_mode}/{bypass_mode}")
         self.zone, self.feature_set, self.seed = zone, feature_set, seed
         self.training_mode, self.bypass_mode, self.adapt = training_mode, bypass_mode, adapt
-        self._model = build_net(n_features, seed=seed, layer_norm=FOMAML_LAYER_NORM and training_mode != "fann")
+        self._model = build_net(n_features, seed=seed)
         self._vars = self._model.trainable_variables
         self._backbone: list[np.ndarray] | None = None
 
@@ -77,12 +74,12 @@ class FastAdaptNN:
         else:
             y_by_qh = [w.y_train.astype(np.float32) for w in windows]
 
-        if self.training_mode != "fomaml_scratch":
+        if self.training_mode != "fomaml":
             keras.utils.set_random_seed(self.seed)
             self._model.fit(np.vstack(X_by_qh), np.concatenate(y_by_qh), epochs=FANN_EPOCHS,
                             batch_size=FANN_BATCH, shuffle=True, verbose=0)
         if self.training_mode != "fann":
-            epochs = FOMAML_SCRATCH_EPOCHS if self.training_mode == "fomaml_scratch" else FOMAML_EPOCHS
+            epochs = FOMAML_EPOCHS if self.training_mode == "fomaml" else FOMAML_PRE_EPOCHS
             self._fomaml(X_by_qh, y_by_qh, epochs)
         self._backbone = self._model.get_weights()
 
@@ -113,8 +110,8 @@ class FastAdaptNN:
             grads = []
             for _ in range(FOMAML_META_BATCH):
                 q = rng.integers(len(X_by_qh))
-                t = rng.integers(FANN_SUPPORT_K, n_days)
                 X_q, y_q = X_by_qh[q], y_by_qh[q]
+                t = rng.integers(FANN_SUPPORT_K, len(X_q))  # 02:00-02:45 products: rows differ around clock changes
                 pool = np.arange(t)
                 nn = pool[np.argsort(cdist(X_q[pool], X_q[t: t + 1], metric="cityblock").ravel())[:FANN_SUPPORT_K]]
                 for v, t_val in zip(self._vars, theta):

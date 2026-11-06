@@ -5,15 +5,15 @@ Model colors are fixed here and must be used identically in every figure.
 """
 import matplotlib
 
-MODEL_COLORS = {
+MODEL_COLORS = {  # model names as in the paper (cSVR = with correlation filter, FOMAML = without pre-training)
     "Naive": "#000000",
     "LASSO": "#2ca02c",
-    "LASSO+N": "#98df8a",
-    "cSVR (filter)": "#7f7f7f",
+    "LASSO+Naive": "#98df8a",
     "cSVR": "#ff7f0e",
+    "FOMAML": "#9467bd",
     "FA-NN": "#1f77b4",
 }
-MODEL_LINESTYLES = {"Naive": "--", "cSVR (filter)": ":"}
+MODEL_LINESTYLES = {"Naive": "--"}
 SEQUENTIAL_CMAP = "viridis"  # as in Figure 2 (trade counts)
 
 TEXT_WIDTH_IN = 6.3  # elsarticle preprint text width

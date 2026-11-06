@@ -4,8 +4,8 @@ Why does the supervised backbone (FA-NN) outperform FOMAML? Diagnostics on a pre
 
 Figure D1: MAE after local adaptation vs. number of samples entering the (outer) gradient.
 Figure D2: sensitivity of the backbone learning rate x epochs and of the inner learning rate x steps (FA-NN).
-Metrics (printed and saved): gradient alignment and signal-to-noise ratios at the FOMAML warm start (with layer
-normalization, as in Models.fann), size of the local adaptation of the FA-NN.
+Metrics (printed and saved): gradient alignment and signal-to-noise ratios at the FOMAML warm start (= FA-NN
+backbone), size of the local adaptation of the FA-NN.
 
 Usage: python Evaluation/fomaml_diagnostics.py
 """
@@ -33,13 +33,13 @@ sys.path.insert(0, os.path.join(ROOT, "Evaluation"))
 import plot_style
 import Models.fann as fann
 from config import FANN_BATCH, FANN_EPOCHS, FANN_LR, FANN_SUPPORT_K, FEATURE_SET_NEIGHBOR, FOMAML_EPOCHS, \
-    FOMAML_LAYER_NORM, FOMAML_META_BATCH, FOMAML_SCRATCH_EPOCHS, N_QH, RANDOM_SEED
+    FOMAML_META_BATCH, FOMAML_PRE_EPOCHS, N_QH, RANDOM_SEED
 from data_loader import QHDataLoader
 
 ZONE, FS, CALIB_END, EVAL_START, EVAL_END = "DE2", FEATURE_SET_NEIGHBOR, "2023-10-01", "2023-10-01", "2023-12-31"
 N_EVAL_DAYS = 12
 OUT_DIR = os.path.join(ROOT, "Evaluation", "plots", "drafts")
-COL = {"FA-NN backbone": "#1f77b4", "FOMAML (from backbone)": "#9467bd", "FOMAML (scratch)": "#d62728"}
+COL = {"FA-NN backbone": "#1f77b4", "FOMAML after pre-training": "#9467bd", "FOMAML without pre-training": "#d62728"}
 plot_style.apply()
 
 
@@ -71,10 +71,10 @@ def flat(weights) -> np.ndarray:
 
 
 # ---------------------------------------------------------------- training with snapshots
-def train_backbone(X, y, n_features, lr=FANN_LR, epochs=FANN_EPOCHS, every=50, layer_norm=False):
+def train_backbone(X, y, n_features, lr=FANN_LR, epochs=FANN_EPOCHS, every=50):
     """Stage-1 training as in Models.fann with snapshots every `every` batches and after every epoch."""
     keras.utils.set_random_seed(RANDOM_SEED)
-    model = fann.build_net(n_features, layer_norm=layer_norm)
+    model = fann.build_net(n_features)
     model.compile(optimizer=keras.optimizers.Adam(learning_rate=lr), loss=keras.losses.MeanAbsoluteError())
     snaps, epoch_snaps, seen = [(0, model.get_weights())], [], [0]
 
@@ -111,10 +111,11 @@ class SnapFOMAML(fann.FastAdaptNN):
 
     def meta_gradients(self, X_by_qh, y_by_qh, rng, n_tasks=FOMAML_META_BATCH):
         theta = [tf.identity(v) for v in self._vars]
-        n_days, grads = len(X_by_qh[0]), []
+        grads = []
         for _ in range(n_tasks):
-            q, t = rng.integers(len(X_by_qh)), rng.integers(FANN_SUPPORT_K, n_days)
+            q = rng.integers(len(X_by_qh))
             Xq, yq = X_by_qh[q], y_by_qh[q]
+            t = rng.integers(FANN_SUPPORT_K, len(Xq))
             pool = np.arange(t)
             nn = pool[np.argsort(cdist(Xq[pool], Xq[t:t + 1], metric="cityblock").ravel())[:FANN_SUPPORT_K]]
             for v, tv in zip(self._vars, theta):
@@ -149,33 +150,32 @@ def main() -> None:
     X, y = np.vstack(X_by_qh), np.concatenate(y_by_qh)
     n_feat = X.shape[1]
     evaluator = fann.FastAdaptNN(ZONE, n_feat, FS)
-    fom_evaluator = fann.FastAdaptNN(ZONE, n_feat, FS, training_mode="fomaml")
+    fom_evaluator = fann.FastAdaptNN(ZONE, n_feat, FS, training_mode="fomaml_pre")
     naive_mae = float(np.mean([abs(nv - yv) for *_, nv, yv in ev]))
 
     # 1. Training paths
     w_bb, snaps_bb, _ = train_backbone(X, y, n_feat)
-    w_warm, snaps_warm, _ = train_backbone(X, y, n_feat, layer_norm=FOMAML_LAYER_NORM)
-    fom = SnapFOMAML(ZONE, n_feat, FS, training_mode="fomaml")
-    fom._model.set_weights(w_warm)
-    _, snaps_fom = fom.run(X_by_qh, y_by_qh, FOMAML_EPOCHS)
-    scr = SnapFOMAML(ZONE, n_feat, FS, training_mode="fomaml_scratch")
-    _, snaps_scr = scr.run(X_by_qh, y_by_qh, FOMAML_SCRATCH_EPOCHS, every=25)
-    offset = snaps_warm[-1][0]  # FOMAML from the backbone continues after the backbone budget
+    fom = SnapFOMAML(ZONE, n_feat, FS, training_mode="fomaml_pre")
+    fom._model.set_weights(w_bb)
+    _, snaps_fom = fom.run(X_by_qh, y_by_qh, FOMAML_PRE_EPOCHS)
+    scr = SnapFOMAML(ZONE, n_feat, FS, training_mode="fomaml")
+    _, snaps_scr = scr.run(X_by_qh, y_by_qh, FOMAML_EPOCHS, every=25)
+    offset = snaps_bb[-1][0]  # FOMAML from the backbone continues after the backbone budget
     paths = {"FA-NN backbone": snaps_bb,
-             "FOMAML (from backbone)": [(offset + n, w) for n, w in snaps_fom],
-             "FOMAML (scratch)": snaps_scr}
+             "FOMAML after pre-training": [(offset + n, w) for n, w in snaps_fom],
+             "FOMAML without pre-training": snaps_scr}
     curves = {k: [(n, eval_mae(w, ev, evaluator if k == "FA-NN backbone" else fom_evaluator)) for n, w in v]
               for k, v in paths.items()}
 
     # 2. Gradient metrics at the FOMAML warm start
-    model = fann.build_net(n_feat, layer_norm=FOMAML_LAYER_NORM)
-    model.set_weights(w_warm)
+    model = fann.build_net(n_feat)
+    model.set_weights(w_bb)
     rng = np.random.default_rng(RANDOM_SEED)
     g_full = supervised_grad(model, X, y)
     sup = {b: np.array([supervised_grad(model, X[i], y[i]) for i in (rng.choice(len(X), b, replace=False) for _ in range(200))])
            for b in (16, 256)}
-    fom_eval = SnapFOMAML(ZONE, n_feat, FS, training_mode="fomaml")
-    fom_eval._model.set_weights(w_warm)
+    fom_eval = SnapFOMAML(ZONE, n_feat, FS, training_mode="fomaml_pre")
+    fom_eval._model.set_weights(w_bb)
     meta = np.array([flat([g.numpy() for g in fom_eval.meta_gradients(X_by_qh, y_by_qh, rng, n_tasks=1)[0]])
                      for _ in range(3200)])
     meta16 = meta.reshape(200, 16, -1).mean(axis=1)
@@ -231,7 +231,7 @@ def main() -> None:
     for i, (alpha, pts) in enumerate(sens_inner.items()):
         s, m = zip(*pts)
         ax2.plot(s, m, marker="o", markersize=3, color=cmap(0.15 + 0.35 * i),
-                 label=f"α = {alpha:g}" + (" (used)" if alpha == defaults[0] else ""))
+                 label=f"η = {alpha:g}" + (" (used)" if alpha == defaults[0] else ""))
     ax2.axvline(defaults[1], color="black", linewidth=0.6, linestyle=":")
     ax2.set_xlabel("Inner steps G"); ax2.legend(fontsize=7)
     for ax in (ax1, ax2):

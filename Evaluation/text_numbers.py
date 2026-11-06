@@ -33,9 +33,9 @@ def timestamps(dates: np.ndarray, n_slots: int) -> pd.DatetimeIndex:
 
 
 print("Mean MAE over zones, without / with naive member; mean naive weight (median over days, all zones)")
-for m in ("lasso", "lasso_n", "csvr_corr", "csvr", "fann", "fann_bypass", "fann_static", "fomaml", "fomaml_scratch"):
+for m in ("lasso", "lasso_n", "csvr_corr", "csvr", "fann", "fann_bypass", "fann_static", "fomaml_pre", "fomaml"):
     a = np.mean([mae(z, D[z][f"pred_{m}"]) for z in ZONES])
-    if m in ("lasso", "csvr_corr", "fann", "fomaml_scratch"):
+    if m in ("lasso", "csvr_corr", "fann", "fomaml"):
         r = {z: withn(z, m) for z in ZONES}
         w = np.concatenate([r[z][1][:, 4] for z in ZONES])
         print(f"{m:16s} {a:.3f} {np.mean([mae(z, r[z][0]) for z in ZONES]):.3f} w={np.median(w):.3f} [{np.quantile(w, .05):.3f}, {np.quantile(w, .95):.3f}]")
@@ -46,12 +46,12 @@ print("\nPairs (p first better / p second better)")
 for z in ZONES:
     d = D[z]
     print(z, "bypass v csvr", *np.round([pb(z, d["pred_fann_bypass"], d["pred_csvr_corr"]), pb(z, d["pred_csvr_corr"], d["pred_fann_bypass"])], 3),
-          "| fomaml v fann", *np.round([pb(z, d["pred_fomaml"], d["pred_fann"]), pb(z, d["pred_fann"], d["pred_fomaml"])], 3),
+          "| fomaml_pre v fann", *np.round([pb(z, d["pred_fomaml_pre"], d["pred_fann"]), pb(z, d["pred_fann"], d["pred_fomaml_pre"])], 3),
           "| nofilter v filter", *np.round([pb(z, d["pred_csvr"], d["pred_csvr_corr"]), pb(z, d["pred_csvr_corr"], d["pred_csvr"])], 3),
           "| static v fann", *np.round([pb(z, d["pred_fann"], d["pred_fann_static"]), mae(z, d["pred_fann_static"]) - mae(z, d["pred_fann"])], 3))
 
 print("\nS4: average of S1-S3 vs. all four (rMAE change, p S4 helps, p S4 hurts)")
-for m in ("lasso", "csvr_corr", "fann", "fomaml_scratch"):
+for m in ("lasso", "csvr_corr", "fann", "fomaml"):
     for z in ZONES:
         without = inverse_mae_average(sets(z, m, (1, 2, 3)), D[z]["y_true"])[0]
         full = D[z][f"pred_{m}"]
@@ -71,7 +71,7 @@ for z in ZONES:
 
 print("\nExcluding quarter-hours without trades in the target window: largest absolute rMAE change")
 vol = master.set_index("Date")
-models = ("lasso", "lasso_n", "csvr_corr", "csvr", "fann", "fann_bypass", "fomaml", "fomaml_scratch")
+models = ("lasso", "lasso_n", "csvr_corr", "csvr", "fann", "fann_bypass", "fomaml_pre", "fomaml")
 worst = 0.0
 for z in ZONES:
     y = D[z]["y_true"]
@@ -93,7 +93,7 @@ for z in ZONES:
           "worse", np.round([pb(z, c, r) for r in rows], 3), "naive", np.round([pb(z, r, n) for r in rows], 4))
 
 print("\n2023 validation, ln_pre vs. current (Evaluation/variant_pretest.py): blocks where ln_pre is better, mean MAE change")
-for prefix in ("", "fomaml_scratch_"):
+for prefix in ("", "fomaml_"):
     diff = {}
     for z in ZONES:
         for start, end in (("01-01", "03-31"), ("04-01", "06-30"), ("07-01", "09-30"), ("10-01", "12-31")):
