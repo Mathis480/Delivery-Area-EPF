@@ -32,7 +32,10 @@ RUN_DIR       = os.path.join(RESULTS_DIR, f"backtest_{TEST_START[:4]}")
 # Ex-post data must be published by the forecast time (60 min before delivery); the publication delay counts from the
 # end of a quarter-hour, so lag = (60 + delay + 15) / 15 quarter-hours relative to the target delivery (features.csv)
 LAG_QH_BALANCING = 6  # netztransparenz.de operational aFRR/mFRR: published 15 min after the quarter-hour
-LAG_QH_ENTSOE    = 9  # ENTSO-E actual load/generation (and cross-border trading): up to 60 min after the quarter-hour
+LAG_QH_ENTSOE    = 9  # ENTSO-E actual load/generation: up to 60 min after the quarter-hour
+# Scheduled commercial exchanges incl. intraday (Reg. (EU) 543/2013, Art. 12(1)(f), 12(2)(e)): updated up to 2 h after
+# each intraday nomination; assuming the last nomination by delivery start, published up to 105 min after the quarter-hour
+LAG_QH_CROSS_BORDER = 12
 EFFECTIVE_CUTOFF_MINUTES = 90  # forecast 60 min before delivery + 30 min publication buffer
 
 # Neighboring contracts: latest admissible window of contract s+k (ends 90 min before delivery of s)

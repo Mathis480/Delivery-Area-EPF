@@ -10,6 +10,7 @@ Usage:
     python run_experiment.py --summary       # summary of existing results only
     python run_experiment.py --models fomaml,fomaml_pre       # recompute selected models, merge into existing results
     python run_experiment.py --models fann --seed 1           # seed robustness, written to RUN_DIR/seed_1
+    python run_experiment.py --sets s3       # recompute selected feature sets, merge, re-average (runtimes unchanged)
 Outputs per zone in RUN_DIR: results_<zone>.npz (forecasts, weights) and runtime_<zone>.csv.
 """
 from __future__ import annotations
@@ -50,8 +51,9 @@ FANN_MODELS["fann_static"] = ("fann", "none")  # backbone without local adaptati
 MODELS = ["lasso", "csvr", "csvr_corr", *FANN_MODELS]
 
 
-def run_zone(job: tuple[str, list[str], int, str]) -> str:
-    zone, models, seed, run_dir = job
+def run_zone(job: tuple[str, list[str], int, str, list[str]]) -> str:
+    zone, models, seed, run_dir, sets = job
+    feature_sets = [fs for fs in FEATURE_SETS if SET_TAGS[fs] in sets]
     fann_models = {k: v for k, v in FANN_MODELS.items() if k in models}
     need_lasso = "lasso" in models or any(bp == "lasso" for _, bp in fann_models.values())
     loader = QHDataLoader()
@@ -64,13 +66,13 @@ def run_zone(job: tuple[str, list[str], int, str]) -> str:
     y_2d[rows, cols] = test["y"].to_numpy()
     naive_2d[rows, cols] = test["naive"].to_numpy()
 
-    preds = {f"{m}_{SET_TAGS[fs]}": np.full_like(y_2d, np.nan) for m in models for fs in FEATURE_SETS}
+    preds = {f"{m}_{SET_TAGS[fs]}": np.full_like(y_2d, np.nan) for m in models for fs in feature_sets}
     runtime = defaultdict(float)
 
     # FA-NN stage 1: one backbone per training mode, bypass mode and feature set
     nets = {}
     for key, (tm, bp) in fann_models.items():
-        for fs in FEATURE_SETS:
+        for fs in feature_sets:
             t0 = time.perf_counter()
             nets[key, fs] = FastAdaptNN(zone, loader.n_features(zone, fs), fs, training_mode=tm, bypass_mode=bp,
                                         seed=seed, adapt=key != "fann_static")
@@ -83,7 +85,7 @@ def run_zone(job: tuple[str, list[str], int, str]) -> str:
         def back(p: float, w) -> float:
             return float(p) * w.y_std + w.y_mean + row.naive
 
-        for fs in FEATURE_SETS:
+        for fs in feature_sets:
             tag = SET_TAGS[fs]
             t0 = time.perf_counter()
             w = loader.get_window(zone, q, row.date, fs, corr_filter=True)
@@ -131,10 +133,14 @@ def run_zone(job: tuple[str, list[str], int, str]) -> str:
 
     # Forecast averaging over the four feature sets (per architecture) and LASSO+N (Marcjasz et al., 2020)
     path = os.path.join(run_dir, f"results_{zone}.npz")
-    out = dict(np.load(path)) if os.path.exists(path) and set(models) != set(MODELS) else {}
+    partial_sets = len(feature_sets) < len(FEATURE_SETS)
+    out = dict(np.load(path)) if os.path.exists(path) and (set(models) != set(MODELS) or partial_sets) else {}
+    if partial_sets:  # members of the other sets are taken from the existing results
+        assert np.array_equal(out["dates"], np.array(days)) and np.array_equal(out["y_true"], y_2d, equal_nan=True)
     out.update({"dates": np.array(days), "y_true": y_2d, "naive": naive_2d})
     for m in models:
-        members = {SET_TAGS[fs]: preds[f"{m}_{SET_TAGS[fs]}"] for fs in FEATURE_SETS}
+        members = {SET_TAGS[fs]: preds[f"{m}_{SET_TAGS[fs]}"] if fs in feature_sets else out[f"pred_{m}_{SET_TAGS[fs]}"]
+                   for fs in FEATURE_SETS}
         out[f"pred_{m}"], out[f"weights_{m}"] = inverse_mae_average(members, y_2d)
         out.update({f"pred_{m}_{tag}": p for tag, p in members.items()})
     if "lasso" in models:
@@ -142,6 +148,8 @@ def run_zone(job: tuple[str, list[str], int, str]) -> str:
 
     os.makedirs(run_dir, exist_ok=True)
     np.savez_compressed(path, **out)
+    if partial_sets:  # runtimes refer to all four sets; keep the existing file
+        return f"[{zone}] sets {','.join(sets)}: " + " | ".join(f"{k}: {v / 60:.1f} min" for k, v in runtime.items())
     rt = pd.DataFrame({"component": list(runtime), "seconds": list(runtime.values())})
     rt["n_forecasts"] = len(test)
     rt_path = os.path.join(run_dir, f"runtime_{zone}.csv")
@@ -172,6 +180,7 @@ def main() -> None:
     parser.add_argument("--zones", default=",".join(ZONES), help="comma-separated zones")
     parser.add_argument("--summary", action="store_true", help="only summarize existing results")
     parser.add_argument("--models", default=",".join(MODELS), help=f"comma-separated subset of {MODELS}")
+    parser.add_argument("--sets", default=",".join(SET_TAGS.values()), help="comma-separated feature sets (s1-s4)")
     parser.add_argument("--seed", type=int, default=RANDOM_SEED, help="FA-NN seed (non-default: RUN_DIR/seed_<seed>)")
     args = parser.parse_args()
     run_dir = RUN_DIR if args.seed == RANDOM_SEED else os.path.join(RUN_DIR, f"seed_{args.seed}")
@@ -181,7 +190,7 @@ def main() -> None:
         multiprocessing.set_start_method("spawn", force=True)
         t0 = time.perf_counter()
         with multiprocessing.Pool(processes=min(N_WORKERS, len(zones))) as pool:
-            for msg in pool.map(run_zone, [(z, args.models.split(","), args.seed, run_dir) for z in zones]):
+            for msg in pool.map(run_zone, [(z, args.models.split(","), args.seed, run_dir, args.sets.split(",")) for z in zones]):
                 print(msg)
         print(f"Backtest finished in {(time.perf_counter() - t0) / 60:.1f} min.")
 

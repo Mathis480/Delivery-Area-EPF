@@ -12,7 +12,7 @@ from scipy.spatial.distance import cdist
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 from config import (
-    FEATURE_SET_BALANCE, FEATURE_SET_FUNDAMENTAL, FEATURE_SET_MACRO, FEATURE_SET_NEIGHBOR, FEATURES_CSV, LAG_QH_BALANCING,
+    FEATURE_SET_BALANCE, FEATURE_SET_FUNDAMENTAL, FEATURE_SET_MACRO, FEATURE_SET_NEIGHBOR, FEATURES_CSV, LAG_QH_BALANCING, LAG_QH_CROSS_BORDER,
     LAG_QH_ENTSOE, MASTER_PARQUET, TEST_END,
     TEST_START,
 )
@@ -63,7 +63,7 @@ class TestData(unittest.TestCase):
         row = row[row["_delivery_date"] == pd.Timestamp(day).date()]
         idx = self.master.index[self.master["Date"] == row["Date"].iloc[0]][0]
         for col, lag in (("DE2_SRL_positive", LAG_QH_BALANCING), ("DE2_load_actual", LAG_QH_ENTSOE),
-                         ("DE_cross_border_trading", LAG_QH_ENTSOE)):
+                         ("DE_cross_border_trading", LAG_QH_CROSS_BORDER)):
             self.assertEqual(row[col].iloc[0], self.master.loc[idx - lag, col], col)
 
     def test_neighbor_features_point_to_admissible_windows(self):

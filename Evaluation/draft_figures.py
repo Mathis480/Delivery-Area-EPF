@@ -1,9 +1,9 @@
 """
-Draft figures for the results section (not yet part of the paper).
+Result and draft figures for the paper:
 
 Usage: python Evaluation/draft_figures.py [results_dir]   (default: RUN_DIR from config)
 Model names as in the paper: cSVR = with correlation filter, FOMAML = without pre-training (post-hoc variants excluded).
-Figures (PDF + PNG) are written to Evaluation/plots/drafts/.
+Writes Figure_3.{pdf,svg} (DM chessboard) to Contribution/SVG/ and all figures (PDF + PNG) to Evaluation/plots/drafts/.
 """
 from __future__ import annotations
 
@@ -26,7 +26,9 @@ from Models.ensemble import daily_loss, dm_test
 
 RESULTS_DIR = sys.argv[1] if len(sys.argv) > 1 else RUN_DIR
 OUT_DIR = os.path.join(ROOT, "Evaluation", "plots", "drafts")
+FIG_DIR = os.path.join(ROOT, "Contribution", "SVG")
 os.makedirs(OUT_DIR, exist_ok=True)
+os.makedirs(FIG_DIR, exist_ok=True)
 plot_style.apply()
 
 MODEL_KEYS = {
@@ -76,13 +78,21 @@ def fig_decoupling() -> None:
 
 
 def fig_dm_chessboard(zd_all: dict) -> None:
-    """F1: one-sided DM p-values; colored cells = column model significantly more accurate than row model."""
+    """F1 / Figure_3: one-sided DM p-values in epftoolbox chessboard style (Lago et al., 2021, Fig. 5)."""
     labels = list(MODEL_KEYS)
-    bounds = [0, 0.001, 0.01, 0.05, 0.10]
-    cmap = matplotlib.colors.ListedColormap(plt.get_cmap(plot_style.SEQUENTIAL_CMAP)(np.linspace(0.05, 0.85, 4)))
-    norm = matplotlib.colors.BoundaryNorm(bounds, cmap.N)
-    fig, axes = plt.subplots(2, 2, figsize=(plot_style.TEXT_WIDTH_IN, 5.6), sharex=True, sharey=True)
-    for ax, z in zip(axes.ravel(), ZONES):
+    # Exact epftoolbox color scale: [0, 0.05) dark green -> yellow, [0.05, 0.10) red -> dark red, >= 0.10 black
+    red = np.concatenate([np.linspace(0.0, 1.0, 50), np.linspace(1.0, 0.5, 50)[1:]])
+    green = np.concatenate([np.linspace(0.5, 1.0, 50), np.zeros(49)])
+    cmap = matplotlib.colors.ListedColormap(np.column_stack([red, green, np.zeros(99)]))
+    cmap.set_bad("black")
+    norm = matplotlib.colors.Normalize(vmin=0.0, vmax=0.10)
+
+    fig = plt.figure(figsize=(5.45, 5.05))
+    gs = fig.add_gridspec(2, 3, width_ratios=[1.0, 1.0, 0.052], wspace=0.05, hspace=0.14)
+    axes = np.array([[fig.add_subplot(gs[r, c]) for c in range(2)] for r in range(2)])
+    cax = fig.add_subplot(gs[:, 2])
+    for idx, (ax, z) in enumerate(zip(axes.ravel(), ZONES)):
+        r_idx, c_idx = divmod(idx, 2)
         zd = zd_all[z]
         loss = {lab: daily_loss(zd[lab], zd["y"]) for lab in labels}
         p = np.full((len(labels), len(labels)), np.nan)
@@ -91,18 +101,32 @@ def fig_dm_chessboard(zd_all: dict) -> None:
                 if i != j:
                     p[i, j] = dm_test(loss[r], loss[c])[1]
         im = ax.imshow(np.ma.masked_where(~(p < 0.10), p), cmap=cmap, norm=norm)
-        ax.set_facecolor("white")
-        ax.set_xticks(range(len(labels)), labels, rotation=90)
-        ax.set_yticks(range(len(labels)), labels)
+        ax.set_xticks(range(len(labels)))
+        ax.set_yticks(range(len(labels)))
+        ax.tick_params(axis="both", which="major", length=2.5, pad=2)
+        if r_idx == 1:
+            ax.set_xticklabels(labels, rotation=38, ha="right", rotation_mode="anchor")
+        else:
+            ax.set_xticklabels([])
+            ax.tick_params(axis="x", which="major", bottom=False)
+        if c_idx == 0:
+            ax.set_yticklabels(labels)
+        else:
+            ax.set_yticklabels([])
+            ax.tick_params(axis="y", which="major", left=False)
         ax.set_xticks(np.arange(-0.5, len(labels)), minor=True)
         ax.set_yticks(np.arange(-0.5, len(labels)), minor=True)
-        ax.grid(False); ax.grid(which="minor", color="#cccccc", linestyle="-", linewidth=0.5)
+        ax.grid(False)
+        ax.grid(which="minor", color="#333333", linestyle="-", linewidth=0.5)
         ax.tick_params(which="minor", length=0)
         for i in range(len(labels)):
-            ax.add_patch(plt.Rectangle((i - 0.5, i - 0.5), 1, 1, color="#000000"))
-        ax.set_title(f"Control Area {z}")
-    cbar = fig.colorbar(im, ax=axes, fraction=0.03, pad=0.03, ticks=bounds)
-    cbar.set_label("DM p-value (column better than row)")
+            ax.plot(i, i, marker="x", color="white", markersize=5.2, markeredgewidth=1.0)
+        ax.set_title(f"Control area {z}", pad=3.5)
+    cbar = fig.colorbar(im, cax=cax, ticks=[0.00, 0.02, 0.04, 0.06, 0.08, 0.10])
+    cbar.ax.tick_params(length=2.5, pad=2)
+    cbar.set_label("DM p-value", labelpad=4)
+    for ext in ("pdf", "svg"):
+        fig.savefig(os.path.join(FIG_DIR, f"Figure_3.{ext}"))
     _save(fig, "draft_F1_dm_chessboard")
 
 

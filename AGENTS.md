@@ -24,7 +24,7 @@
 * National `VWAP_0to30`: Internal imputation fallback only. Never use as target, feature, or benchmark.
 * Information set: forecast issued 60 min before delivery + 30 min publication buffer = continuous-trade cutoff 90 min before delivery.
 * Neighbor contracts: Window ending $A$ minutes before delivery is safe if $A \ge 90 + 15 \cdot k$ for $k \in [-4, +2]$.
-* Ex-post features: Realized values must be published by the forecast time (60 min before delivery); delay counts from the end of the quarter-hour. Balancing energy (netztransparenz, 15 min delay): lag 6 QH. ENTSO-E actuals (load, generation, cross-border; 60 min delay): lag 9 QH. Lags per column in `features.csv` (`ex_post_lag_qh`).
+* Ex-post features: Realized values must be published by the forecast time (60 min before delivery); delay counts from the end of the quarter-hour. Balancing energy (netztransparenz, 15 min delay): lag 6 QH. ENTSO-E actuals (load, generation; 60 min delay): lag 9 QH. Cross-border scheduled exchanges (updates up to 2 h after each intraday nomination): lag 12 QH. Lags per column in `features.csv` (`ex_post_lag_qh`).
 * No backward fill: `bfill` is prohibited.
 * Feature catalog (`features.csv`): one row per master-dataset column (1,221).
   * `tag`: `input` (961), `excluded` (254, e.g. windows after the 90-min cutoff), `label` (5), `index` (1).
@@ -42,7 +42,7 @@ Map German TSOs 1:1 to official EPEX delivery areas:
 Never use raw company names in code, features, or model configs.
 
 ## 5. Missing Data Imputation
-* Regional prices: Own window first; fallback to national `VWAP_{w}`.
+* Regional prices: Own window first, then the preceding zonal window of the same product; if no zonal trade has occurred yet, the national `VWAP_{w}` of the same window.
 * National prices: Window `345to360` falls back to Intraday Auction (or Day-Ahead Auction if missing); subsequent windows forward-fill horizontally; window `0to30` falls back to `VWAP_0to15` / `VWAP_15to30`.
 * Volumes, trade counts, net flows: Fill missing values with `0.0`.
 
