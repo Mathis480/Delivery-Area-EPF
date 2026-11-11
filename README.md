@@ -46,60 +46,46 @@ The EPEX SPOT transaction data are not public. The dataset cannot be shared. Fun
 
 ## Reproduction
 
-All results were computed on CPU with Python 3.11.15 and the package versions pinned in `requirements.txt`:
+Python 3.11.15, CPU only, package versions pinned in `requirements.txt`:
 
 ```bash
-conda create -n deep_learning python=3.11.15
-conda activate deep_learning
+conda create -n deep_learning python=3.11.15 && conda activate deep_learning
 pip install -r requirements.txt
+bash reproduce.sh            # all stages in order, about 12 h in total
+bash reproduce.sh backtest   # or single stages
 ```
 
-Run from the repository root, in this order:
+Raw data must be placed as described in `Data/*/README.md` before the `data` stage. Times measured on an AMD Ryzen 5 7600X (6 cores, 12 threads, 64 GB RAM):
 
-```bash
-# 1. Data (raw files as described in Data/*/README.md)
-python "Data/EPEX Intraday Continuous/calculate_ID_DEx_UTC.py"  # raw EPEX trades -> ID_DelArea_<area>_<year>.csv
-jupyter execute create_master_dataset.ipynb   # -> Data/master_dataset.parquet (incl. feature_engineering.py); outputs are not written back
-python -m unittest discover -s tests          # consistency tests
-python tests/feature_snapshot.py              # loader regression check against hashes in tests/fixtures/ (not in the repository; create with --update)
+| Stage | Content | Time |
+| :--- | :--- | :--- |
+| `data` | EPEX trades → zonal 15-min windows (`calculate_ID_DEx_UTC.py`), master dataset (`create_master_dataset.ipynb`), unit tests | 2–3 h |
+| `backtest` | all models, four zones in parallel → `Results/backtest_2024/` | 3.7 h |
+| `seeds` | four further seeds of FA-NN and FOMAML → `Results/backtest_2024/seed_<s>/` | 3 h |
+| `retrain` | per-forecast retraining reference on 2023, DE2 (paper Sec. 5.5, see below) | 1.75 h |
+| `runtime` | single-thread runtime benchmark (paper Table 3) | 10 min |
+| `paper` | tables (`Contribution/tables/`), figures (`Contribution/SVG/`), numbers quoted in the text (printed) | minutes |
 
-# 2. Backtest 2024
-python run_experiment.py                      # all models -> Results/backtest_2024/results_<zone>.npz, runtime_<zone>.csv, summary.csv
-for s in 1 2 3 4; do python run_experiment.py --models fann --seed $s; python run_experiment.py --models fomaml,fomaml_pre --seed $s; done  # seed robustness -> Results/backtest_2024/seed_<s>/
-
-# 3. Pre-tests on 2023 and diagnostics (design decisions, not reported in the paper unless noted)
-Q2023=2023-01-01:2023-03-31,2023-04-01:2023-06-30,2023-07-01:2023-09-30,2023-10-01:2023-12-31
-python Evaluation/variant_pretest.py --zones DE1,DE2,DE3,DE4 --periods $Q2023 current ln_pre
-python Evaluation/variant_pretest.py --mode fomaml --zones DE1,DE2,DE3,DE4 --periods $Q2023 current ln_pre
-python Evaluation/variant_pretest.py ln reg ln_reg             # regularization / layer normalization on DE2, Q4 2023
-python Evaluation/fomaml_diagnostics.py       # FOMAML diagnostics and sensitivity (Q4 2023) -> Evaluation/plots/drafts/
-python Evaluation/runtime_benchmark.py        # single-thread runtimes -> Results/runtime_benchmark/ (paper, Table 3)
-# retraining reference (paper, Sec. 5.5): see below
-
-# 4. Paper tables, figures and numbers
-python Evaluation/make_tables.py              # -> Contribution/tables/tab_main.tex, tab_runtime.tex
-python Evaluation/data_figures.py             # -> Contribution/SVG/Figure_1.pdf, Figure_2.pdf, Figure_target_window.pdf
-python Evaluation/text_numbers.py             # numbers quoted in the text that are not in the tables (printed)
-python Evaluation/draft_figures.py            # -> Contribution/SVG/Figure_3.pdf and Evaluation/plots/drafts/
-```
+Memory: about 2.4 GB per worker; `backtest` uses 4 workers, `retrain` 8. `python tests/feature_snapshot.py` checks the data loader against reference hashes (create them once with `--update`).
 
 ### Retraining reference (paper, Sec. 5.5)
 
 Two scripts compare the FA-NN with conventional per-forecast retraining on pre-test data of 2023 (DE2), so the test year is not touched:
 
-- `Evaluation/backbone_epochs.py` trains one FA-NN backbone per 2023 quarter and feature set and evaluates snapshots after 6 to 200 epochs, with and without local adaptation. Snapshot `e6` is the backtest configuration and serves as the FA-NN reference.
-- `Evaluation/retrain_baseline.py` trains a fresh network of the same architecture for every product, day and feature set (default Keras initialization, Adam, early stopping) on every 13th day of 2023 (28 days) and compares it with the naive benchmark and the `e6` reference. Run `backbone_epochs.py` first.
+- `Evaluation/backbone_epochs.py` trains one FA-NN backbone per 2023 quarter and feature set and evaluates snapshots after 6 to 200 epochs, with and without local adaptation. Snapshot `e6` is the backtest configuration and serves as the FA-NN reference (15 min).
+- `Evaluation/retrain_baseline.py` trains a fresh network of the same architecture for every product, day and feature set (default Keras initialization, Adam, early stopping) on every 13th day of 2023 (28 days) and compares it with the naive benchmark and the `e6` reference (1.5 h). `--summary` prints MAE relative to naive and the DM test, `--timing` the unloaded single-thread time per fit. Run `backbone_epochs.py` first.
+
+### Optional: design pre-tests (not reported in the paper)
 
 ```bash
-python Evaluation/backbone_epochs.py --zones DE2               # -> Results/backbone_epochs/
-python Evaluation/retrain_baseline.py --zones DE2 --every 13   # -> Results/retrain_baseline/
-python Evaluation/retrain_baseline.py --summary                # MAE relative to naive, days won, DM test
-python Evaluation/retrain_baseline.py --timing                 # unloaded single-thread time per fit -> hours per zone and test year
+Q2023=2023-01-01:2023-03-31,2023-04-01:2023-06-30,2023-07-01:2023-09-30,2023-10-01:2023-12-31
+python Evaluation/variant_pretest.py --zones DE1,DE2,DE3,DE4 --periods $Q2023 current ln_pre             # layer normalization, FA-NN
+python Evaluation/variant_pretest.py --mode fomaml --zones DE1,DE2,DE3,DE4 --periods $Q2023 current ln_pre   # same for FOMAML
+python Evaluation/variant_pretest.py ln reg ln_reg                                                      # regularization, DE2 Q4 2023
+python Evaluation/fomaml_diagnostics.py                                                                 # FOMAML diagnostics, Q4 2023
 ```
 
-The summary is also printed by `Evaluation/text_numbers.py`.
-
-The map of the control areas and the timeline of the forecasting setup are drawn by hand (draw.io), not generated. All settings are in `config.py`.
+The map of the control areas and the timeline of the forecasting setup are drawn by hand (draw.io). All settings are in `config.py`.
 
 ## Result files
 
@@ -125,6 +111,7 @@ features.csv               feature catalog
 data_loader.py             rolling windows, standardization, variable filters
 Models/                    linear.py (LASSO), csvr.py, fann.py, ensemble.py (averaging, DM/GW tests)
 run_experiment.py          backtest
+reproduce.sh               all stages in order (see Reproduction)
 Evaluation/                tables, figures, runtime benchmark, 2023 pre-tests
 tests/                     consistency and regression tests
 old/                       archived code, data and results
