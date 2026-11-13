@@ -105,8 +105,8 @@ def fig_trades() -> None:
 
 def fig_target_window() -> None:
     """(a) MAE between consecutive 15-min zonal VWAPs by time to delivery (both windows traded); (b) |zonal - national|
-    VWAP in the naive (105-90 min) and target (30-0 min) windows. Test year (local delivery days). The national VWAP is
-    used here for description only."""
+    VWAP in the naive (105-90 min) and target (30-0 min) windows. Test year (local delivery days). The national VWAP
+    (all German trades) is used here for description only."""
     ends = list(range(0, 345, 15))  # window end in minutes before delivery, compared with the window ending 15 min earlier
     cols = ["VWAP_0to30", "VWAP_90to105"] + [f"{z}_VWAP_{c}{a}to{a + 15}" for z in ZONES for a in range(0, 360, 15)
                                              for c in ("", "total_volume_")] + [f"{z}_VWAP_{w}" for z in ZONES for w in ("0to30", "90to105")]

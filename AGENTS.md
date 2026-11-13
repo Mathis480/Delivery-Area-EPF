@@ -8,7 +8,7 @@
 * Literature ground truth: Consult `old/LITERATURE_KNOWLEDGE_BASE.md` (local archive, git-ignored) before citing formulas or papers.
   * Marcjasz et al. (2018): Inverse-MAE window weighting ($w \propto 1/\text{MAE}$, Eq. 5).
   * Marcjasz et al. (2020): 50:50 arithmetic average with naive baseline ($\text{ens} = 0.5\hat{y} + 0.5y_{\text{naive}}$, Eq. 15).
-  * Puć & Janczura (2024): Linear inverse-MAE rolling weighting ($p=1.0$, Eq. 25).
+  * Puć & Janczura (2026, IJF 42(3), bib key `Puc.2024`): Linear inverse-MAE rolling weighting ($p=1.0$, Eq. 18; Eq. 25 in arXiv v1). Cite equation numbers of the published version (`Contribution/Literature/pdf/Puc.2024.pdf`).
 
 ## 2. Formula Rendering (Chat Readability)
 * No raw LaTeX math tags (`$...$` or `$$...$$`) in chat responses (IDE markdown renderer does not parse them).
@@ -58,4 +58,4 @@ Never use raw company names in code, features, or model configs.
   * DE2: `26.6803 EUR/MWh` (RMSE: `133.8570`, Median: `13.9600`)
   * DE3: `27.2706 EUR/MWh`
   * DE4: `27.2518 EUR/MWh`
-* Competition policy: Strict 1:1 evaluation (FA-NN vs cSVR). Do not create hybrid cross-architecture ensembles.
+* Competition policy: Evaluate every model on its own first (FA-NN vs cSVR 1:1). Cross-architecture ensembles are allowed only as a final step after the separate evaluation, never inside the experiment or model development.

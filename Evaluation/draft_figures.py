@@ -21,7 +21,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "Evaluation"))
 import plot_style
-from config import MASTER_PARQUET, RUN_DIR, ZONES
+from config import MASTER_PARQUET, RUN_DIR, TEST_START, TIMEZONE, ZONES
 from Models.ensemble import daily_loss, dm_test
 
 RESULTS_DIR = sys.argv[1] if len(sys.argv) > 1 else RUN_DIR
@@ -57,7 +57,7 @@ def fig_decoupling() -> None:
     """F0: absolute zonal-national price spread before (90-105 min) and within the target window (0-30 min)."""
     cols = ["Date", "VWAP_90to105", "VWAP_0to30"] + [f"{z}_VWAP_{w}" for z in ZONES for w in ("90to105", "0to30")]
     m = pd.read_parquet(MASTER_PARQUET, columns=cols)
-    m = m[pd.to_datetime(m["Date"], utc=True) >= "2024-01-01"]
+    m = m[pd.to_datetime(m["Date"], utc=True).dt.tz_convert(TIMEZONE) >= pd.Timestamp(TEST_START, tz=TIMEZONE)]
     cmap = plt.get_cmap(plot_style.SEQUENTIAL_CMAP)
     shades = {"90to105": cmap(0.75), "0to30": cmap(0.25)}
     fig, ax = plt.subplots(figsize=(plot_style.TEXT_WIDTH_IN, 2.6))

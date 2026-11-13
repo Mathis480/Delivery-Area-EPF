@@ -19,8 +19,6 @@ STAGE1 = {"LASSO": "lasso", "LASSO+Naive": "lasso_n", "cSVR": "csvr_corr", "FOMA
 WITH_NAIVE = {"LASSO (N)": "lasso+n", "cSVR (N)": "csvr_corr+n", "FOMAML (N)": "fomaml+n",
               "FA-NN (N)": "fann+n"}
 _with_naive = {}
-STAGE2 = {"FOMAML (after pre-training)": ("fomaml_pre", "fann"), "cSVR without filter": ("csvr", "csvr_corr"),
-          "FA-NN with LASSO bypass": ("fann_bypass", "fann")}
 
 
 def pred(z, m):
@@ -63,10 +61,18 @@ def save(table, name, caption, label, midrule_before=None, colsep=4):
 
 save({lab: {z: f"{err(z, m) / err(z, 'naive'):.4f}{stars(p_better(z, m, 'naive'))}" for z in ZONES}
       for lab, m in {**STAGE1, **WITH_NAIVE}.items()},
-     "tab_main", "Forecast accuracy (rMAE) in 2024 (naive MAE: "
-     + ", ".join(f"{z} {err(z, 'naive'):.2f}" for z in ZONES) + r" EUR/MWh; one-sided DM test vs.\ naive: "
-     r"$^{***}p<0.01$, $^{**}p<0.05$, $^{*}p<0.10$; (N): naive included in average). FOMAML is trained without supervised pre-training.", "tab:MainResults",
+     "tab_main", "Forecast accuracy (rMAE) in 2024. Naive MAE: "
+     + ", ".join(f"{z} {err(z, 'naive'):.2f}" for z in ZONES) + r" EUR/MWh. Stars: one-sided DM test vs.\ naive "
+     r"($^{***}p<0.01$, $^{**}p<0.05$, $^{*}p<0.10$). (N): naive included in average. FOMAML is trained without supervised pre-training.", "tab:MainResults",
      midrule_before="LASSO (N)")
+
+# Individual feature sets (members of the inverse-MAE average)
+SETS = {"LASSO": "lasso", "cSVR": "csvr_corr", "FOMAML": "fomaml", "FA-NN": "fann"}
+save({(lab, f"S{i}"): {z: f"{err(z, f'{m}_s{i}') / err(z, 'naive'):.4f}{stars(p_better(z, f'{m}_s{i}', 'naive'))}"
+                       for z in ZONES} for lab, m in SETS.items() for i in range(1, 5)},
+     "tab_sets", r"Forecast accuracy (rMAE) of the individual feature sets in 2024, before forecast averaging. Stars: "
+     r"one-sided DM test vs.\ naive ($^{***}p<0.01$, $^{**}p<0.05$, $^{*}p<0.10$). FOMAML is trained without supervised pre-training.",
+     "tab:SetResults")
 
 # Runtime (Evaluation/runtime_benchmark.py): DE2, one thread, sample extrapolated to the full test year
 rt = pd.read_csv(os.path.join(ROOT, "Results", "runtime_benchmark", "runtime_DE2.csv")).set_index("component")
@@ -78,7 +84,7 @@ for lab, (s1, s2) in RUNTIME.items():
     once = rt.at[s1, "min_per_zone_year"] if s1 else 0.0
     rows[lab] = {"Per forecast (ms)": f"{rt.at[s2, 'ms_per_forecast']:.1f}",
                  "Test year (min, sum)": f"{once + rt.at[s2, 'min_per_zone_year']:.1f}"}
-save(rows, "tab_runtime", "Single-thread runtime per control area (DE2, summed over S1--S4; extrapolated from "
+save(rows, "tab_runtime", "Single-thread runtime per control area (DE2, summed over S1--S4, extrapolated from "
      f"{int(rt['n_sample'].iloc[0]):,} to {int(rt['n_year'].iloc[0]):,} forecasts). Model rows exclude data access. The test-year sums of FA-NN and FOMAML include the one-time Stage-1 training.",
      "tab:Runtime", colsep=6)
 

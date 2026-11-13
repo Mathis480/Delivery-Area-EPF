@@ -27,9 +27,10 @@ def timestamps(dates: np.ndarray, n_slots: int) -> pd.DatetimeIndex:
         for q in range(n_slots):
             if q < N_QH:
                 ts = (day + pd.Timedelta(minutes=15 * q)).tz_localize(TIMEZONE, ambiguous=True, nonexistent="NaT")
-            else:  # second delivery of 02:00-02:45 on the autumn DST day
-                ts = (day + pd.Timedelta(minutes=15 * (q - N_QH + DST_PRODUCTS[0]))).tz_localize(
-                    TIMEZONE, ambiguous=False, nonexistent="NaT")
+            else:  # second delivery of 02:00-02:45, exists on the autumn DST day only
+                local = day + pd.Timedelta(minutes=15 * (q - N_QH + DST_PRODUCTS[0]))
+                first, second = (local.tz_localize(TIMEZONE, ambiguous=a, nonexistent="NaT") for a in (True, False))
+                ts = second if second is not pd.NaT and second != first else pd.NaT
             out.append(ts.tz_convert("UTC") if ts is not pd.NaT else pd.NaT)
     return pd.DatetimeIndex(out)
 
@@ -71,7 +72,8 @@ for m in ("fann", "csvr_corr"):
     print(m, {z: [round(mae(z, D[z][f"pred_{m}_s{i}"]) / mae(z, D[z]["naive"]), 4) for i in range(1, 5)] for z in ZONES})
     print(m, {z: np.round(D[z][f"weights_{m}"].mean(axis=0), 3).tolist() for z in ZONES})
 
-master = pd.read_parquet(MASTER_PARQUET, columns=["Date"] + [f"{z}_VWAP_total_volume_0to30" for z in ZONES])
+master = pd.read_parquet(MASTER_PARQUET, columns=["Date"] + [f"{z}_VWAP_total_{k}_0to30" for z in ZONES
+                                                              for k in ("volume", "trades")])
 master["Date"] = pd.to_datetime(master["Date"], utc=True)
 m = master.set_index("Date").tz_convert("Europe/Berlin").loc["2024-01-01":"2024-12-31"]
 print("\nNo trades in target window:")
@@ -93,6 +95,19 @@ for z in ZONES:
         a = np.abs(D[z][f"pred_{m}"] - y); n = np.abs(D[z]["naive"] - y)
         worst = max(worst, abs(np.nanmean(a) / np.nanmean(n) - np.nanmean(a[traded]) / np.nanmean(n[traded])))
 print(round(worst, 5))
+
+print("\nTarget-window liquidity: QH < 1 MW (share), mean trades; MAE FA-NN minus cSVR (all / < 1 MW / >= 1 MW)")
+for z in ZONES:
+    y = D[z]["y_true"]
+    ts = timestamps(D[z]["dates"], y.shape[1])
+    ok = ~ts.isna()
+    get = lambda c: np.where(ok, vol[c].reindex(ts.where(ok, ts[ok][0])).fillna(0).to_numpy(), np.nan).reshape(y.shape)
+    v, n = get(f"{z}_VWAP_total_volume_0to30"), get(f"{z}_VWAP_total_trades_0to30")
+    valid = ~np.isnan(y)
+    thin, thick = (v < 1) & valid, (v >= 1) & valid
+    gap = np.abs(D[z]["pred_fann"] - y) - np.abs(D[z]["pred_csvr_corr"] - y)
+    print(z, f"{thin.sum()} ({thin.sum() / valid.sum():.1%}), trades {np.nanmean(n[valid]):.0f}, "
+          f"gap {np.nanmean(gap[valid]):+.3f} / {np.nanmean(gap[thin]):+.3f} / {np.nanmean(gap[thick]):+.3f}")
 
 print("\nSeeds (base + 4): zone MAE, rMAE range, one-sided DM p vs. cSVR (FA-NN better / cSVR better), p vs. naive")
 for z in ZONES:
@@ -122,10 +137,26 @@ print(f"{daily.shape[0]} days; mean MAE over sets: " + ", ".join(f"{c} {daily[c]
 print(f"FA-NN better than retraining on {(daily['fann'] < daily['retrain']).sum()} of {daily.shape[0]} days, "
       f"retraining better than naive on {(daily['retrain'] < daily['naive']).sum()}; one-sided DM p (FA-NN better) "
       f"{dm_test(daily['retrain'].to_numpy(), daily['fann'].to_numpy(), h=1)[1]:.4f}")
-sec = np.concatenate([np.load(f)["seconds"] for f in sorted(glob.glob(os.path.join(RESULTS_DIR, "retrain_baseline", "*.npz")))])
+sec = np.concatenate([np.load(f)["seconds"] for f in sorted(glob.glob(os.path.join(RESULTS_DIR, "retrain_baseline", "DE2_*.npz")))])
 sec = sec[sec > 0]
 print(f"Per fit under parallel load {sec.mean():.2f} s ({sec.mean() * 35136 * 4 / 3600:.1f} h per control area and test year)")
 sec = np.concatenate([np.load(f)["seconds"] for f in glob.glob(os.path.join(RESULTS_DIR, "retrain_baseline", "timing", "*.npz"))])
 sec = sec[sec > 0]
 print(f"Unloaded single process (retrain_baseline.py --timing): {sec.mean():.2f} s per fit, extrapolated test year per "
       f"control area (35,136 QH x 4 sets, 1 thread): {sec.mean() * 35136 * 4 / 3600:.1f} h")
+
+print("\nPost-hoc 50:50 average of FA-NN and cSVR (after the separate evaluation; Discussion, Conclusion)")
+naive_mae = {z: mae(z, D[z]["naive"]) for z in ZONES}
+for s in (42, 1, 2, 3, 4):
+    fann = {z: D[z]["pred_fann"] if s == 42 else np.load(os.path.join(RUN_DIR, f"seed_{s}", f"results_{z}.npz"))["pred_fann"]
+            for z in ZONES}
+    ens = {z: 0.5 * fann[z] + 0.5 * D[z]["pred_csvr_corr"] for z in ZONES}
+    print(f"seed {s}: rMAE " + "/".join(f"{mae(z, ens[z]) / naive_mae[z]:.4f}" for z in ZONES)
+          + f", zone-mean MAE {np.mean([mae(z, ens[z]) for z in ZONES]):.3f} (FA-NN {np.mean([mae(z, fann[z]) for z in ZONES]):.3f}, "
+          f"cSVR {np.mean([mae(z, D[z]['pred_csvr_corr']) for z in ZONES]):.3f}); max DM p vs. FA-NN / cSVR "
+          f"{max(pb(z, ens[z], fann[z]) for z in ZONES):.4f} / {max(pb(z, ens[z], D[z]['pred_csvr_corr']) for z in ZONES):.4f}, "
+          f"max GW p {max(pb_gw(z, ens[z], fann[z]) for z in ZONES):.4f} / {max(pb_gw(z, ens[z], D[z]['pred_csvr_corr']) for z in ZONES):.4f}")
+ok = {z: ~np.isnan(D[z]["y_true"]) for z in ZONES}
+print("Correlation of the corrections (forecast - naive), FA-NN vs. cSVR: " + "/".join(
+    f"{np.corrcoef((D[z]['pred_fann'] - D[z]['naive'])[ok[z]], (D[z]['pred_csvr_corr'] - D[z]['naive'])[ok[z]])[0, 1]:.2f}"
+    for z in ZONES))
