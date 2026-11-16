@@ -2,9 +2,8 @@
 Deterministic, row-wise feature engineering for the master dataset.
 
 Derived features that do not depend on a calibration window are materialized here as columns of
-master_dataset.parquet, so that every model input exists physically in the master dataset and is
-registered in features.csv. Window-dependent preprocessing (ex-post lag per column, `ex_post_lag_qh`: 6 QH balancing, 9 QH ENTSO-E, 12 QH cross-border; standardization,
-variable filters) stays in data_loader.py.
+master_dataset.parquet, so that every model input exists in the master dataset and is registered in
+features.csv. Ex-post lags (`ex_post_lag_qh`), standardization and variable filters stay in data_loader.py.
 
 * S2 (neighboring contracts): VWAP of the latest admissible window of contract s+k, spread to the own
   naive price, spread to the national neighbor VWAP, traded volume and trade count. The window of
@@ -38,94 +37,52 @@ PHASES = [
 LOAD_FLOOR_MW = 100.0
 
 
-def build_neighbor_features(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, list[str]]]:
-    """S2: leakage-safe neighbor trajectories, spreads and liquidity. Requires a continuous 15-min grid."""
-    nb_series = {}
-    # National neighbor VWAP (helper for the zonal-national spread)
+def build_neighbor_features(df: pd.DataFrame) -> pd.DataFrame:
+    """S2: neighbor prices, spreads and liquidity from admissible windows. Requires a continuous 15-min grid."""
+    out = {}
+    # National neighbor VWAP (helper: fallback and reference of the zonal-national spread)
     for k, win in NEIGHBOR_SAFE_VWAP_WINDOWS.items():
-        col = f"VWAP_{win}"
-        if col in df.columns:
-            s = df[col].shift(-k)
-            nb_series[f"DE_nb_k{k:+d}_VWAP_{win}"] = s.ffill() if k > 0 else s
-
-    neighbor_features: dict[str, list[str]] = {z: [] for z in ZONES}
+        s = df[f"VWAP_{win}"].shift(-k)
+        out[f"DE_nb_k{k:+d}_VWAP_{win}"] = s.ffill() if k > 0 else s  # k > 0: contracts beyond the end of the dataset
     for zone in ZONES:
         bench = df[f"{zone}_VWAP_90to105"]
         for k, win in NEIGHBOR_SAFE_VWAP_WINDOWS.items():
             pfx = f"{zone}_nb_k{k:+d}"
-            nat_s = nb_series.get(f"DE_nb_k{k:+d}_VWAP_{win}")
-
-            reg_src = f"{zone}_VWAP_{win}"
-            if reg_src in df.columns:
-                val = df[reg_src].shift(-k)
-                if k > 0:
-                    val = val.ffill()
-                if nat_s is not None:
-                    val = val.fillna(nat_s)
-
-                price_col, spread_col = f"{pfx}_VWAP_{win}", f"{pfx}_spread"
-                nb_series[price_col] = val
-                nb_series[spread_col] = val - bench
-                neighbor_features[zone].extend([price_col, spread_col])
-
-                if nat_s is not None:
-                    cross_col = f"{zone}_vs_DE_nb_k{k:+d}"
-                    nb_series[cross_col] = val - nat_s
-                    neighbor_features[zone].append(cross_col)
-
-            for metric, suffix in (("total_volume", "vol"), ("total_trades", "trades")):
-                src = f"{zone}_VWAP_{metric}_{win}"
-                if src in df.columns:
-                    col = f"{pfx}_{suffix}"
-                    nb_series[col] = df[src].shift(-k).fillna(0.0)
-                    neighbor_features[zone].append(col)
-
-    return pd.DataFrame(nb_series, index=df.index), neighbor_features
+            national = out[f"DE_nb_k{k:+d}_VWAP_{win}"]
+            val = df[f"{zone}_VWAP_{win}"].shift(-k)
+            val = (val.ffill() if k > 0 else val).fillna(national)
+            out[f"{pfx}_VWAP_{win}"] = val
+            out[f"{pfx}_spread"] = val - bench
+            out[f"{zone}_vs_DE_nb_k{k:+d}"] = val - national
+            out[f"{pfx}_vol"] = df[f"{zone}_VWAP_total_volume_{win}"].shift(-k).fillna(0.0)
+            out[f"{pfx}_trades"] = df[f"{zone}_VWAP_total_trades_{win}"].shift(-k).fillna(0.0)
+    return pd.DataFrame(out, index=df.index)
 
 
-def build_balance_features(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, list[str]]]:
+def build_balance_features(df: pd.DataFrame) -> pd.DataFrame:
     """S4: phase-aggregated trade balances normalized by the zonal day-ahead load forecast."""
-    bal_series = {}
-    s4_features: dict[str, list[str]] = {z: [] for z in ZONES}
-
-    def _phase_sum(cols: list[str]) -> np.ndarray:
-        cols = [c for c in cols if c in df.columns]
-        return df[cols].sum(axis=1).values if cols else np.zeros(len(df))
-
+    out = {}
     for zone in ZONES:
         load = np.maximum(df[f"{zone}_load_forecast"].values, LOAD_FLOOR_MW)
-        partner_zones = [pz for pz in ZONES if pz != zone]
+
+        def ratio(metric: str, wins: list[str]) -> np.ndarray:
+            return df[[f"{zone}_{metric}_{w}" for w in wins]].sum(axis=1).values / load
 
         # 1. Net balance ratios across phases (4)
         for p_name, wins in PHASES:
-            col = f"{zone}_id_balance_ratio_{p_name}"
-            bal_series[col] = _phase_sum([f"{zone}_id_balance_{w}" for w in wins]) / load
-            s4_features[zone].append(col)
-
-        # 2. Bilateral balance ratios to partner zones in middle and late phase (6)
-        for pz in partner_zones:
+            out[f"{zone}_id_balance_ratio_{p_name}"] = ratio("id_balance", wins)
+        # 2. Bilateral balance ratios to the other zones in the middle and late phase (6)
+        for pz in (z for z in ZONES if z != zone):
             for p_name, wins in (("135to240", MID_WINS), ("90to135", LATE_WINS)):
-                col = f"{zone}_id_balance_to_{pz}_ratio_{p_name}"
-                bal_series[col] = _phase_sum([f"{zone}_id_balance_to_{pz}_{w}" for w in wins]) / load
-                s4_features[zone].append(col)
-
+                out[f"{zone}_id_balance_to_{pz}_ratio_{p_name}"] = ratio(f"id_balance_to_{pz}", wins)
         # 3. Intra-area trade ratios across phases (4)
         for p_name, wins in PHASES:
-            col = f"{zone}_id_trade_intra_ratio_{p_name}"
-            bal_series[col] = _phase_sum([f"{zone}_id_trade_intra_{w}" for w in wins]) / load
-            s4_features[zone].append(col)
-
-        # 4. Balance momentum and closing intra-area trade ratio (2)
-        b_90, b_105 = _phase_sum([f"{zone}_id_balance_90to105"]), _phase_sum([f"{zone}_id_balance_105to120"])
-        col = f"{zone}_id_balance_diff_ratio_90to120"
-        bal_series[col] = (b_90 - b_105) / load
-        s4_features[zone].append(col)
-
-        col = f"{zone}_id_trade_intra_closing_ratio_90to105"
-        bal_series[col] = _phase_sum([f"{zone}_id_trade_intra_90to105"]) / load
-        s4_features[zone].append(col)
-
-    return pd.DataFrame(bal_series, index=df.index), s4_features
+            out[f"{zone}_id_trade_intra_ratio_{p_name}"] = ratio("id_trade_intra", wins)
+        # 4. Change of the net balance and closing intra-area trade ratio (2)
+        out[f"{zone}_id_balance_diff_ratio_90to120"] = (
+            df[f"{zone}_id_balance_90to105"].values - df[f"{zone}_id_balance_105to120"].values) / load
+        out[f"{zone}_id_trade_intra_closing_ratio_90to105"] = ratio("id_trade_intra", ["90to105"])
+    return pd.DataFrame(out, index=df.index)
 
 
 def add_derived_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -135,9 +92,7 @@ def add_derived_features(df: pd.DataFrame) -> pd.DataFrame:
     if len(step) != 1 or step[0] != np.timedelta64(15, "m"):
         raise ValueError("Neighbor features require a continuous 15-minute grid.")
 
-    nb_df, _ = build_neighbor_features(df)
-    bal_df, _ = build_balance_features(df)
-    derived = pd.concat([nb_df, bal_df], axis=1)
+    derived = pd.concat([build_neighbor_features(df), build_balance_features(df)], axis=1)
     df = df.drop(columns=[c for c in derived.columns if c in df.columns])
     return pd.concat([df, derived.astype(np.float64)], axis=1)
 
@@ -147,6 +102,7 @@ if __name__ == "__main__":
     out = add_derived_features(master)
     backup = os.path.join(os.path.dirname(os.path.dirname(MASTER_PARQUET)), "old", "data_archive", "master_dataset_before_feature_engineering.parquet")
     if not os.path.exists(backup):
+        os.makedirs(os.path.dirname(backup), exist_ok=True)
         shutil.copy2(MASTER_PARQUET, backup)
     out.to_parquet(MASTER_PARQUET, index=False)
     print(f"Master dataset: {master.shape} -> {out.shape} (backup: {backup})")

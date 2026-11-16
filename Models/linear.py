@@ -1,5 +1,5 @@
 """
-LASSO with penalty selection by LARS and expanding-window time-series cross-validation (Puć & Janczura, 2024).
+LASSO with penalty selection by LARS and expanding-window time-series cross-validation (Puć & Janczura, 2026).
 """
 from __future__ import annotations
 

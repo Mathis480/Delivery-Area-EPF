@@ -1,6 +1,6 @@
 """
-Corrected Support Vector Regression (cSVR) of Puć & Janczura (2024): Laplace kernel on the features
-multiplied by a Gaussian correction kernel on the standardized naive price (Eq. 12), with quantile-based widths.
+Corrected Support Vector Regression (cSVR) of Puć & Janczura (2026): Laplace kernel on the features
+multiplied by a Gaussian correction kernel on the standardized naive price (Eq. 6), with quantile-based widths.
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def _kernel(model: CSVRModel, X: np.ndarray, bm_std: np.ndarray, dist: np.ndarra
     """Kernel against the calibration days; `dist` reuses an already computed feature distance matrix."""
     if dist is None:
         dist = cdist(X, model.X_train, metric=METRIC)
-    correction = (1.0 / (2.0 * model.sigma ** 2)) * np.abs(bm_std[:, None] - model.bm_train_std[None, :]) ** 2
+    correction = (1.0 / (2.0 * model.sigma ** 2)) * (bm_std[:, None] - model.bm_train_std[None, :]) ** 2
     return np.exp(model.width * dist - correction)
 
 

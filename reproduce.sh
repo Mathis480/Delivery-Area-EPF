@@ -22,10 +22,9 @@ stage_seeds() {     # ~3 h: four further seeds for FA-NN and FOMAML
 stage_retrain() {   # ~1.75 h: per-forecast retraining reference on 2023 (Sec. 5.5)
     python Evaluation/backbone_epochs.py --zones DE2
     python Evaluation/retrain_baseline.py --zones DE2 --every 13
-    python Evaluation/retrain_baseline.py --summary
     python Evaluation/retrain_baseline.py --timing
 }
-stage_runtime() {   # ~10 min: single-thread runtime benchmark (Table 3)
+stage_runtime() {   # ~10 min: single-thread runtime benchmark (Table 4)
     python Evaluation/runtime_benchmark.py
 }
 stage_paper() {     # ~5 min: tables, figures and numbers quoted in the text

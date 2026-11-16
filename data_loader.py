@@ -13,9 +13,9 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
 from config import (
-    BENCHMARK_COL_PATTERN, CORR_FILTER_EXEMPT_PREFIXES, CORR_THRESHOLDS, DATA_START, DUPLICATE_CORR, FEATURE_SET_BALANCE, FEATURE_SET_FUNDAMENTAL,
-    FEATURE_SET_MACRO, FEATURE_SET_NEIGHBOR, FEATURES_CSV, LOOKBACK_DAYS, MASTER_PARQUET, N_QH,
-    DST_PRODUCTS, TARGET_COL_PATTERN, TIMEZONE, ZONES,
+    BENCHMARK_COL_PATTERN, CORR_FILTER_EXEMPT_PREFIXES, CORR_THRESHOLDS, DATA_START, DST_PRODUCTS, DUPLICATE_CORR,
+    FEATURE_SET_BALANCE, FEATURE_SET_FUNDAMENTAL, FEATURE_SET_MACRO, FEATURE_SET_NEIGHBOR, FEATURES_CSV, LOOKBACK_DAYS,
+    MASTER_PARQUET, N_QH, TARGET_COL_PATTERN, TIMEZONE, ZONES,
 )
 
 SET_COLUMNS = {FEATURE_SET_MACRO: "S1", FEATURE_SET_NEIGHBOR: "S2", FEATURE_SET_FUNDAMENTAL: "S3", FEATURE_SET_BALANCE: "S4"}
@@ -135,7 +135,7 @@ class QHDataLoader:
         col_mask = np.ptp(X_train_raw, axis=0) > 0
         threshold = CORR_THRESHOLDS[feature_set] if corr_filter and feature_set in CORR_THRESHOLDS else DUPLICATE_CORR
         corr = np.abs(np.triu(np.corrcoef(X_train_raw[:, col_mask], rowvar=False), 1))
-        # As in Puć & Janczura (2024), exogenous variables are exempt from the correlation filter (not from exact duplicates)
+        # As in Puć & Janczura (2026), exogenous variables are exempt from the correlation filter (not from exact duplicates)
         filterable = ~self._exempt[(zone, feature_set)][col_mask]
         hit = (corr >= DUPLICATE_CORR) | ((corr >= threshold) & filterable[:, None] & filterable[None, :])
         pairs = np.argwhere(hit)

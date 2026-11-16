@@ -27,9 +27,9 @@ This project was created with assistance of generative AI.
 
 | Key | Model |
 | :--- | :--- |
-| `lasso` | LASSO, penalty selected by LARS and expanding-window CV (Puć & Janczura, 2024) |
+| `lasso` | LASSO, penalty selected by LARS and expanding-window CV (Puć & Janczura, 2026) |
 | `lasso_n` | 50:50 average of LASSO and naive (Marcjasz et al., 2020) |
-| `csvr_corr` | Corrected SVR (Puć & Janczura, 2024) with correlation filter, main benchmark |
+| `csvr_corr` | Corrected SVR (Puć & Janczura, 2026) with correlation filter, main benchmark |
 | `csvr` | cSVR without correlation filter (post-hoc modification) |
 | `fann` | Neural network with fast local adaptation (main model) |
 | `fann_static` | Model variant: FA-NN backbone without local adaptation (G = 0) |
@@ -42,7 +42,7 @@ Each model is estimated per zone, product and feature set (S1–S4); the four se
 
 The EPEX SPOT transaction data are not public. The dataset cannot be shared. Fundamentals (Fraunhofer ISE energy-charts) and balancing energy (netztransparenz.de) are public.
 
-`features.csv` lists every column of the master dataset once: `tag` (`input`, `excluded`, `label`, `index`), set membership (S1–S4), `ex_post_lag_qh` (lag of ex-post data in quarter-hours until publication at the forecast time: 6 for balancing energy, 9 for ENTSO-E actuals, 12 for cross-border trading), `window_end_min` (end of the trading window in minutes before delivery of the target contract) and `derived_from`.
+`features.csv` lists every column of the master dataset once: `tag` (`input` = admissible at the forecast time, `excluded`, `label`, `index`), set membership (S1–S4, the inputs actually used), `ex_post_lag_qh` (lag of ex-post data in quarter-hours until publication at the forecast time: 6 for balancing energy, 9 for ENTSO-E actuals, 12 for cross-border trading), `window_end_min` (end of the trading window in minutes before delivery of the target contract) and `derived_from` (source of columns built from other columns).
 
 ## Reproduction
 
@@ -63,7 +63,7 @@ Raw data must be placed as described in `Data/*/README.md` before the `data` sta
 | `backtest` | all models, four zones in parallel → `Results/backtest_2024/` | 3.7 h |
 | `seeds` | four further seeds of FA-NN and FOMAML → `Results/backtest_2024/seed_<s>/` | 3 h |
 | `retrain` | per-forecast retraining reference on 2023, DE2 (paper Sec. 5.5, see below) | 1.75 h |
-| `runtime` | single-thread runtime benchmark (paper Table 3) | 10 min |
+| `runtime` | single-thread runtime benchmark (paper Table 4) | 10 min |
 | `paper` | tables (`Contribution/tables/`), figures (`Contribution/SVG/`), numbers quoted in the text (printed) | minutes |
 
 Memory: about 2.4 GB per worker; `backtest` uses 4 workers, `retrain` 8. `python tests/feature_snapshot.py` checks the data loader against reference hashes (create them once with `--update`).
@@ -73,7 +73,7 @@ Memory: about 2.4 GB per worker; `backtest` uses 4 workers, `retrain` 8. `python
 Two scripts compare the FA-NN with conventional per-forecast retraining on pre-test data of 2023 (DE2), so the test year is not touched:
 
 - `Evaluation/backbone_epochs.py` trains one FA-NN backbone per 2023 quarter and feature set and evaluates snapshots after 6 to 200 epochs, with and without local adaptation. Snapshot `e6` is the backtest configuration and serves as the FA-NN reference (15 min).
-- `Evaluation/retrain_baseline.py` trains a fresh network of the same architecture for every product, day and feature set (default Keras initialization, Adam, early stopping) on every 13th day of 2023 (28 days) and compares it with the naive benchmark and the `e6` reference (1.5 h). `--summary` prints MAE relative to naive and the DM test, `--timing` the unloaded single-thread time per fit. Run `backbone_epochs.py` first.
+- `Evaluation/retrain_baseline.py` trains a fresh network of the same architecture for every product, day and feature set (default Keras initialization, Adam, early stopping) on every 13th day of 2023 (28 days) and compares it with the naive benchmark and the `e6` reference (1.5 h). It prints the MAE per feature set and the DM test (`--summary` repeats this for existing results); `--timing` measures the unloaded single-thread time per fit. Run `backbone_epochs.py` first.
 
 ### Optional: design pre-tests (not reported in the paper)
 
@@ -82,8 +82,15 @@ Q2023=2023-01-01:2023-03-31,2023-04-01:2023-06-30,2023-07-01:2023-09-30,2023-10-
 python Evaluation/variant_pretest.py --zones DE1,DE2,DE3,DE4 --periods $Q2023 current ln_pre             # layer normalization, FA-NN
 python Evaluation/variant_pretest.py --mode fomaml --zones DE1,DE2,DE3,DE4 --periods $Q2023 current ln_pre   # same for FOMAML
 python Evaluation/variant_pretest.py ln reg ln_reg                                                      # regularization, DE2 Q4 2023
-python Evaluation/fomaml_diagnostics.py                                                                 # FOMAML diagnostics, Q4 2023
 ```
+
+### Optional: sensitivity analysis on 2023 (mentioned in the Discussion)
+
+```bash
+python Evaluation/fomaml_diagnostics.py   # DE2, S2, Q4 2023
+```
+
+`Evaluation/fomaml_diagnostics.py` varies the backbone learning rate and epochs and the Stage-2 learning rate and steps of the FA-NN (Figure D2). It also reports diagnostics of the FOMAML meta-gradient (Figure D1, not reported in the paper).
 
 The map of the control areas and the timeline of the forecasting setup are drawn by hand (draw.io). All settings are in `config.py`.
 

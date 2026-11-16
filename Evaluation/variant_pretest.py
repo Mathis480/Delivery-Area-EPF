@@ -1,5 +1,5 @@
 """
-FA-NN architecture variants (FA-NN main variant only).
+Architecture variants of the FA-NN and its FOMAML modes on pre-test blocks.
 
 Usage:
     python Evaluation/variant_pretest.py --zones DE1,DE2 --periods 2023-07-01:2023-09-30,2023-10-01:2023-12-31 current ln_pre
@@ -54,7 +54,7 @@ def patched_fann(layer_norm: str | None, reg: bool):
     from tensorflow.keras import layers, regularizers
     import Models.fann as fann
 
-    def build_net(n_features, seed=fann.RANDOM_SEED, **_):  # the variant sets the layer normalization, not the mode
+    def build_net(n_features, seed=fann.RANDOM_SEED):
         init = keras.initializers.GlorotUniform(seed=seed)
         x = inp = keras.Input(shape=(n_features,))
         for i, h in enumerate(fann.FANN_HIDDEN_SIZES):

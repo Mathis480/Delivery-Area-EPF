@@ -56,14 +56,14 @@ FEATURE_SET_BALANCE     = "set4_balance"
 FEATURE_SETS = [FEATURE_SET_MACRO, FEATURE_SET_NEIGHBOR, FEATURE_SET_FUNDAMENTAL, FEATURE_SET_BALANCE]
 SET_TAGS     = {FEATURE_SET_MACRO: "s1", FEATURE_SET_NEIGHBOR: "s2", FEATURE_SET_FUNDAMENTAL: "s3", FEATURE_SET_BALANCE: "s4"}
 
-# Correlation filter of Puć & Janczura (2024), applied to S1 and S2 (LASSO, cSVR replication)
+# Correlation filter of Puć & Janczura (2026), applied to S1 and S2 (LASSO, cSVR replication)
 CORR_THRESHOLDS = {FEATURE_SET_MACRO: 0.80, FEATURE_SET_NEIGHBOR: 0.95}
-# Exogenous variables exempt from the correlation filter, as in Puć & Janczura (2024): auction prices (incl. lags), weekday dummies
+# Exogenous variables exempt from the correlation filter, as in Puć & Janczura (2026): auction prices (incl. lags), weekday dummies
 CORR_FILTER_EXEMPT_PREFIXES = ("Dayahead_Auction_hourly", "Intraday Auction Price", "Weekday_")
 # Exact duplicates within a calibration window (e.g. forecast deviation = actual when the solar forecast is zero)
 DUPLICATE_CORR = 1.0 - 1e-10
 
-# cSVR (Puć & Janczura, 2024, Eq. 12)
+# cSVR (Puć & Janczura, 2026, Eq. 6)
 CSVR_EPSILON        = 0.1
 CSVR_C              = 1.0
 CSVR_Q_KERNEL       = 0.75  # Laplace kernel: theoretical quantile
@@ -73,7 +73,7 @@ CSVR_Q_DATA_NAIVE   = 0.75  # Gaussian correction: empirical quantile of squared
 CSVR_NORM           = 2     # L2 norm in the Laplace kernel
 
 # LASSO
-LASSO_MAX_ITER = 1000       # as in the reference implementation (Puć & Janczura, 2024); never reached (≤ 50 LARS steps)
+LASSO_MAX_ITER = 1000       # as in the reference implementation (Puć & Janczura, 2026); never reached (≤ 50 LARS steps)
 LASSO_CV_DAYS  = 14         # expanding-window CV over the last 14 calibration days
 
 # FA-NN (fast local adaptation; Finn et al., 2017 for the FOMAML variants)
@@ -97,7 +97,7 @@ FOMAML_META_BATCH     = 16  # tasks per meta-update
 
 RANDOM_SEED = 42
 
-# FORECAST AVERAGING (Marcjasz et al., 2018; Puć & Janczura, 2024): per-product inverse-MAE weights
+# FORECAST AVERAGING (Marcjasz et al., 2018; Puć & Janczura, 2026): per-product inverse-MAE weights
 ENSEMBLE_CALIB_DAYS = 14
 ENSEMBLE_POWER      = 1.0
 

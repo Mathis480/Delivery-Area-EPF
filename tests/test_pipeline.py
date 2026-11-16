@@ -12,9 +12,8 @@ from scipy.spatial.distance import cdist
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 from config import (
-    FEATURE_SET_BALANCE, FEATURE_SET_FUNDAMENTAL, FEATURE_SET_MACRO, FEATURE_SET_NEIGHBOR, FEATURES_CSV, LAG_QH_BALANCING, LAG_QH_CROSS_BORDER,
-    LAG_QH_ENTSOE, MASTER_PARQUET, TEST_END,
-    TEST_START,
+    FEATURE_SET_BALANCE, FEATURE_SET_FUNDAMENTAL, FEATURE_SET_MACRO, FEATURE_SET_NEIGHBOR, LAG_QH_BALANCING,
+    LAG_QH_CROSS_BORDER, LAG_QH_ENTSOE, MASTER_PARQUET, TEST_END, TEST_START,
 )
 from Models.csvr import _kernel, train_csvr
 from Models.ensemble import dm_test, gw_test, inverse_mae_average
@@ -75,7 +74,7 @@ class TestData(unittest.TestCase):
 
 class TestModels(unittest.TestCase):
     def test_csvr_kernel_matches_reference(self):
-        """Kernel of Puć & Janczura (2024, Eq. 12) with quantile-based widths."""
+        """Kernel of Puć & Janczura (2026, Eq. 6) with quantile-based widths."""
         rng = np.random.default_rng(0)
         X, naive, y = rng.normal(size=(60, 8)), rng.normal(50, 10, 60), rng.normal(size=60)
         dist = cdist(X, X)

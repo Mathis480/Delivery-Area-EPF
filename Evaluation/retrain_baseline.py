@@ -43,7 +43,7 @@ REF_DIR = os.path.join(RESULTS_DIR, "backbone_epochs")
 YEAR = ("2023-01-01", "2023-12-31")
 BATCH, MAX_EPOCHS, PATIENCE, VAL_FRAC = 32, 200, 10, 0.2
 N_PROC = int(os.environ.get("RETRAIN_N_PROC", 8))  # ~2.4 GB RAM per worker (master dataset)
-TIMING_DAY = "2023-06-14"  # a sampled day of the stride-13 sample
+TIMING_DAY = "2023-06-14"  # day of the unloaded timing run (not part of the accuracy sample)
 
 
 def _set_out_dir(path: str) -> None:
@@ -140,7 +140,7 @@ def summary() -> None:
           f"retrain better than FA-NN: {dm_test(daily['fann'].to_numpy(), daily['retrain'].to_numpy(), h=1)[1]:.4f}")
     sec, ep = np.concatenate(sec), np.concatenate(ep)
     print(f"Per fit: {sec.mean():.2f} s (median {np.median(sec):.2f}), epochs mean {ep.mean():.0f} (median {np.median(ep):.0f})")
-    print(f"Extrapolated test year per control area (35,136 QH x 4 sets, 1 thread): {sec.mean() * 35136 * 4 / 3600:.1f} h")
+    print(f"Extrapolated test year per control area under parallel load (35,136 QH x 4 sets): {sec.mean() * 35136 * 4 / 3600:.1f} h")
 
 
 if __name__ == "__main__":

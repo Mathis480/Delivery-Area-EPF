@@ -39,12 +39,12 @@ class TestFeatureCatalog(unittest.TestCase):
         """Actual values are lagged until published at the forecast time: balancing 15 min, ENTSO-E 60 min,
         cross-border schedules 105 min delay."""
         lagged = self.cat.dropna(subset=["ex_post_lag_qh"])
-        balancing = lagged["name"].str.contains(r"_(SRL|MRL)_")
+        balancing = lagged["name"].str.contains(r"_(?:SRL|MRL)_")
         cross_border = lagged["name"].str.contains("cross_border")
         self.assertTrue((lagged.loc[balancing, "ex_post_lag_qh"] == LAG_QH_BALANCING).all())
         self.assertTrue((lagged.loc[cross_border, "ex_post_lag_qh"] == LAG_QH_CROSS_BORDER).all())
         self.assertTrue((lagged.loc[~balancing & ~cross_border, "ex_post_lag_qh"] == LAG_QH_ENTSOE).all())
-        actual = self.cat["name"].str.contains(r"_(actual|diff)$|cross_border|_(SRL|MRL)_")
+        actual = self.cat["name"].str.contains(r"_(?:actual|diff)$|cross_border|_(?:SRL|MRL)_")
         self.assertTrue(self.cat.loc[actual, "ex_post_lag_qh"].notna().all())
 
     def test_set_sizes(self):

@@ -3,11 +3,15 @@ Numbers quoted in the results section of the paper that are not in the generated
 
     python Evaluation/text_numbers.py
 """
-import glob, os, sys
+import glob
+import os
+import sys
+
 import numpy as np
+import pandas as pd
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-import pandas as pd
 from config import DST_PRODUCTS, MASTER_PARQUET, N_QH, RESULTS_DIR, RUN_DIR, TIMEZONE, ZONES
 from Models.ensemble import daily_loss, dm_test, gw_test, inverse_mae_average
 
@@ -35,7 +39,7 @@ def timestamps(dates: np.ndarray, n_slots: int) -> pd.DatetimeIndex:
     return pd.DatetimeIndex(out)
 
 
-print("Mean MAE over zones, without / with naive member; mean naive weight (median over days, all zones)")
+print("Mean MAE over zones, without / with naive member; naive weight (median [5 %, 95 %] over days, all zones)")
 for m in ("lasso", "lasso_n", "csvr_corr", "csvr", "fann", "fann_bypass", "fann_static", "fomaml_pre", "fomaml"):
     a = np.mean([mae(z, D[z][f"pred_{m}"]) for z in ZONES])
     if m in ("lasso", "csvr_corr", "fann", "fomaml"):
@@ -75,7 +79,7 @@ for m in ("fann", "csvr_corr"):
 master = pd.read_parquet(MASTER_PARQUET, columns=["Date"] + [f"{z}_VWAP_total_{k}_0to30" for z in ZONES
                                                               for k in ("volume", "trades")])
 master["Date"] = pd.to_datetime(master["Date"], utc=True)
-m = master.set_index("Date").tz_convert("Europe/Berlin").loc["2024-01-01":"2024-12-31"]
+m = master.set_index("Date").tz_convert(TIMEZONE).loc["2024-01-01":"2024-12-31"]
 print("\nNo trades in target window:")
 for z in ZONES:
     print(z, int((m[f"{z}_VWAP_total_volume_0to30"].fillna(0) == 0).sum()), len(m))
@@ -96,7 +100,7 @@ for z in ZONES:
         worst = max(worst, abs(np.nanmean(a) / np.nanmean(n) - np.nanmean(a[traded]) / np.nanmean(n[traded])))
 print(round(worst, 5))
 
-print("\nTarget-window liquidity: QH < 1 MW (share), mean trades; MAE FA-NN minus cSVR (all / < 1 MW / >= 1 MW)")
+print("\nTarget-window liquidity: QH < 1 MWh (share), mean trades; MAE FA-NN minus cSVR (all / < 1 MWh / >= 1 MWh)")
 for z in ZONES:
     y = D[z]["y_true"]
     ts = timestamps(D[z]["dates"], y.shape[1])
@@ -116,8 +120,24 @@ for z in ZONES:
     print(z, np.round([mae(z, r) / mae(z, n) for r in rows], 4), "better", np.round([pb(z, r, c) for r in rows], 3),
           "worse", np.round([pb(z, c, r) for r in rows], 3), "naive", np.round([pb(z, r, n) for r in rows], 4))
 
-print("\n2023 validation, ln_pre vs. current (Evaluation/variant_pretest.py): blocks where ln_pre is better, mean MAE change")
-for prefix in ("", "fomaml_"):
+print("\nStability and diversity: days with FA-NN better than naive, months with FA-NN rMAE < 1, mean correlation of the set corrections")
+for z in ZONES:
+    y, n, ok = D[z]["y_true"], D[z]["naive"], ~np.isnan(D[z]["y_true"])
+    month = np.array([str(d)[5:7] for d in D[z]["dates"]])
+    r = [np.nanmean(np.abs(D[z]["pred_fann"] - y)[month == k]) / np.nanmean(np.abs(n - y)[month == k]) for k in sorted(set(month))]
+    corr = {m: np.mean([np.corrcoef((D[z][f"pred_{m}_s{i}"] - n)[ok], (D[z][f"pred_{m}_s{j}"] - n)[ok])[0, 1]
+                        for i in range(1, 5) for j in range(i + 1, 5)]) for m in ("fann", "csvr_corr")}
+    print(z, f"{(daily_loss(D[z]['pred_fann'], y) < daily_loss(n, y)).sum()} of {len(y)} days, {sum(v < 1 for v in r)} of 12 months "
+          f"(max {max(r):.3f}), set correlation FA-NN {corr['fann']:.2f}, cSVR {corr['csvr_corr']:.2f}")
+
+print("\nBackbone epochs on 2023 (Evaluation/backbone_epochs.py, DE2, mean over four quarters): rMAE with adaptation, training loss S1")
+be = pd.read_csv(os.path.join(RESULTS_DIR, "backbone_epochs", "summary.csv"))
+naive_2023 = be.loc[be["mode"] == "naive", "ens"].mean()
+for e, g in be[be["mode"] == "adapt"].groupby("epochs"):
+    print(f"{e:4d} epochs: rMAE {g['ens'].mean() / naive_2023:.4f}, loss {g['loss_s1'].mean():.3f}")
+
+print("\n2023 pre-test, ln_pre vs. current (optional, not in the paper): blocks where ln_pre is better, mean MAE change")
+for prefix in ("", "fomaml_") if os.path.isdir(os.path.join(RESULTS_DIR, "variant_pretest")) else ():
     diff = {}
     for z in ZONES:
         for start, end in (("01-01", "03-31"), ("04-01", "06-30"), ("07-01", "09-30"), ("10-01", "12-31")):

@@ -49,7 +49,7 @@ Never use raw company names in code, features, or model configs.
 ## 6. Backtesting Protocol
 * Rolling window: Fixed 822 days (~2.25 years).
 * No separate validation window. Rolling windows within the calibration window:
-  * LASSO penalty: expanding-window CV over the last 14 calibration days (`LASSO_CV_DAYS`, as in Puć & Janczura, 2024).
+  * LASSO penalty: expanding-window CV over the last 14 calibration days (`LASSO_CV_DAYS`, as in Puć & Janczura, 2026).
   * Forecast averaging: per-product inverse-MAE weights over the 14 days before the test day (`ENSEMBLE_CALIB_DAYS`; Puć & Janczura use 7).
   * FA-NN/FOMAML: fixed hyperparameters, no rolling validation. Design decisions (e.g. layer normalization) use pre-test blocks of 2023 (`Evaluation/variant_pretest.py`).
 * Test horizon: Calendar year 2024 in local time (35,136 quarter-hours, zero NaNs).

@@ -1,5 +1,5 @@
 """
-Rolling inverse-MAE forecast averaging (Marcjasz et al., 2018; Puć & Janczura, 2024) and
+Rolling inverse-MAE forecast averaging (Marcjasz et al., 2018; Puć & Janczura, 2026) and
 statistical tests on daily loss vectors (Diebold & Mariano, 1995; Giacomini & White, 2006).
 """
 from __future__ import annotations

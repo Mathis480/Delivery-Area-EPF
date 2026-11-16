@@ -148,7 +148,7 @@ def fig_rmae_by_hour(zd: dict, zone: str = "DE2") -> None:
 
 
 def fig_cumulative(zd_all: dict) -> None:
-    """F3: cumulative difference in daily MAE, scaled by the number of test days (end value = annual MAE difference)."""
+    """F3: cumulative difference in daily MAE, divided by the number of test days."""
     fig, axes = plt.subplots(2, 2, figsize=(plot_style.TEXT_WIDTH_IN, 4.2), sharex=True, sharey=True)
     for ax, z in zip(axes.ravel(), ZONES):
         zd = zd_all[z]
@@ -158,10 +158,10 @@ def fig_cumulative(zd_all: dict) -> None:
             diff = np.nancumsum(daily_loss(zd[ref], zd["y"]) - l_fa) / n_days
             ax.plot(zd["dates"], diff, color=COL[ref], label=f"{ref} − FA-NN")
         ax.axhline(0, color="black", linewidth=0.6)
-        ax.set_title(f"Control Area {z}")
+        ax.set_title(f"Control area {z}")
         ax.xaxis.set_major_locator(mdates.MonthLocator(bymonth=[1, 3, 5, 7, 9, 11]))
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%b"))
-    fig.supylabel("Cumulative difference in daily MAE / 366 (EUR/MWh)", fontweight="bold", fontsize=9)
+    fig.supylabel("Cumulative difference in daily MAE (EUR/MWh)", fontweight="bold", fontsize=9)
     axes[0, 0].legend(loc="upper left")
     _save(fig, "draft_F3_cumulative_mae_difference")
 

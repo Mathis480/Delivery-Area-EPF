@@ -1,5 +1,5 @@
 """
-Single-thread runtime benchmark (paper table T2): one process, one thread, identical sample of forecasts for all models.
+Single-thread runtime benchmark (paper Table 4): one process, one thread, identical sample of forecasts for all models.
 
 Usage:
     python Evaluation/runtime_benchmark.py                 # DE2, default sample
